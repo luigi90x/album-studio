@@ -1,0 +1,15 @@
+# conversazioni e appunti locali: restano sul computer
+chat.md
+*.local.md
+
+# build a file singolo: si rigenera con `node build.js`
+album-studio.html
+
+# residui
+pages/
+_probe*.html
+_serve.js
+_check.html
+_report.txt
+node_modules/
+*.log

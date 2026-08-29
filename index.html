@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f0f10" />
+  <title>Album Studio — caroselli fotografici locali</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">A</span><span class="brand-name">ALBUM STUDIO</span></div>
+      <nav class="tabs">
+        <button class="tab active" data-panel="editor">Striscia</button>
+        <button class="tab" data-panel="layouts">Template</button>
+        <button class="tab" data-panel="projects">Progetti</button>
+      </nav>
+      <div class="top-actions">
+        <button class="btn icon" id="undo" title="Annulla (Ctrl+Z)">↶</button>
+        <button class="btn icon" id="redo" title="Ripristina (Ctrl+Shift+Z)">↷</button>
+        <button class="btn icon" id="help-open" title="Come funziona">?</button>
+        <button class="btn" id="save-project" title="Salva il progetto su questo dispositivo">Salva</button>
+        <button class="btn primary" id="export-open" title="Genera le slide pronte da pubblicare">Esporta</button>
+      </div>
+    </header>
+
+    <section id="editor-panel" class="panel active">
+      <div class="workspace">
+        <!-- ------------------------------------------------------- stage -->
+        <section class="stage-wrap">
+          <div class="add-bar">
+            <label class="add-btn" for="add-photo" title="Inserisce un'immagine libera, sopra le altre: spostala e ridimensionala come vuoi">
+              <input id="add-photo" type="file" accept="image/*" multiple hidden>
+              <span class="add-ico">◧</span> Aggiungi immagine
+            </label>
+            <label class="add-btn ghost" for="add-bg" title="Inserisce un'immagine che riempie la slide e sta dietro alle altre">
+              <input id="add-bg" type="file" accept="image/*" multiple hidden>
+              <span class="add-ico">▭</span> Immagine a tutta slide
+            </label>
+            <button class="add-btn ghost" id="add-color" title="Inserisce un riquadro a tinta unita che riempie la slide: per una slide di solo colore">
+              <span class="add-ico">■</span> Colore
+            </button>
+            <button class="add-btn ghost" id="add-text" title="Inserisce un testo: titolo, didascalia o etichetta">
+              <span class="add-ico">T</span> Testo
+            </button>
+            <div class="mode-switch" role="group" aria-label="Vista">
+              <button id="mode-edit" class="seg active" title="Composizione sulla striscia continua">Modifica</button>
+              <button id="mode-preview" class="seg" title="Come appare scorrendo il carosello">Anteprima</button>
+            </div>
+            <div class="zoomer">
+              <button id="zoom-out" title="Riduci">−</button>
+              <output id="zoom-value">100%</output>
+              <button id="zoom-in" title="Ingrandisci">+</button>
+              <button id="zoom-fit" title="Adatta allo schermo">Adatta</button>
+            </div>
+          </div>
+          <div id="stage" class="stage">
+            <div id="strip-scroll" class="strip-scroll"><div id="strip" class="strip"></div></div>
+            <div id="preview-track" class="preview-track hidden"></div>
+          </div>
+          <div class="ruler-wrap"><div id="ruler" class="ruler"></div></div>
+        </section>
+
+        <!-- ------------------------------- what you selected: slide, photo -->
+        <aside class="col col-right">
+          <div class="scope-head">Slide <b id="sel-slide-label">01</b> di <span id="slide-count-inline">4</span></div>
+
+          <details class="sec" open id="sec-layers">
+            <summary>Cosa c'è su questa slide <span class="pill" id="layers-count">0</span></summary>
+            <div class="sec-body">
+              <p class="note">Tocca una riga per riprendere quell'elemento, anche se è coperto.</p>
+              <div id="layers-list" class="layers"></div>
+            </div>
+          </details>
+
+          <details class="sec hidden" open id="sec-item">
+            <summary><span id="sel-kind-label">Immagine selezionata</span> <span class="pill" id="sel-span-label">1 slide</span></summary>
+            <div class="sec-body">
+              <label class="btn primary wide center" for="item-replace" title="Scegli un'immagine dal dispositivo: prende posizione, taglio e cornice di questa"><input id="item-replace" type="file" accept="image/*" hidden><span id="replace-label">↑ Usa una mia immagine qui</span></label>
+              <p class="note" id="item-position-note">Occupa la slide 01.</p>
+              <div class="field" id="item-fill-row"><span>Colore del riquadro</span><input id="item-fill-color" type="color" value="#e8e2d6" title="Questo riquadro è una tinta unita: scegli il colore"></div>
+
+              <div id="text-controls" class="hidden">
+                <textarea id="item-text" rows="3" placeholder="Scrivi qui il testo…" title="A capo con Invio"></textarea>
+                <div class="field"><span>Carattere</span>
+                  <select id="item-font" title="Font di sistema, funziona anche offline">
+                    <option value="sans"    style="font:14px 'Segoe UI',system-ui,Arial,sans-serif">Sans — Abc 123</option>
+                    <option value="serif"   style="font:14px Georgia,'Times New Roman',serif">Serif — Abc 123</option>
+                    <option value="display" style="font:14px Impact,'Arial Black',sans-serif">Titolo — Abc 123</option>
+                    <option value="narrow"  style="font:14px 'Arial Narrow',Arial,sans-serif">Stretto — Abc 123</option>
+                    <option value="script"  style="font:15px 'Segoe Script','Brush Script MT',cursive">Corsivo — Abc 123</option>
+                    <option value="mono"    style="font:13px 'Courier New',monospace">Mono — Abc 123</option>
+                  </select>
+                </div>
+                <div class="field"><span>Stile</span>
+                  <span class="mini-segmented" id="style-row">
+                    <button data-style="bold" title="Grassetto" style="font-weight:700">B</button>
+                    <button data-style="italic" title="Corsivo" style="font-style:italic;font-family:Georgia,serif">I</button>
+                    <button data-style="underline" title="Sottolineato" style="text-decoration:underline">U</button>
+                    <button data-style="strike" title="Barrato" style="text-decoration:line-through">S</button>
+                  </span>
+                </div>
+                <div class="field"><span>Colore testo</span><input id="item-text-color" type="color" value="#ffffff"></div>
+                <label class="range-label">Dimensione <output id="item-size-value">8</output></label>
+                <input id="item-size" type="range" min="2" max="24" step="0.5" value="8" title="In percentuale sull'altezza della slide, così resta uguale cambiando formato">
+                <div class="field"><span>Allineamento</span>
+                  <span class="mini-segmented" id="align-row">
+                    <button data-align="left" title="A sinistra">⯇</button>
+                    <button data-align="center" title="Al centro">≡</button>
+                    <button data-align="right" title="A destra">⯈</button>
+                  </span>
+                </div>
+                <div class="field"><span>In verticale</span>
+                  <span class="mini-segmented" id="valign-row">
+                    <button data-valign="top" title="In alto">⯅</button>
+                    <button data-valign="middle" title="Al centro">≡</button>
+                    <button data-valign="bottom" title="In basso">⯆</button>
+                  </span>
+                </div>
+                <div class="field"><span>Sfondo del testo</span><input id="item-text-bg" type="color" value="#000000"></div>
+                <label class="range-label">Opacità sfondo <output id="item-text-bg-opacity-value">0</output></label>
+                <input id="item-text-bg-opacity" type="range" min="0" max="100" value="0">
+                <div class="preset-row" id="text-presets">
+                  <button data-preset="light" title="Testo scuro su fascia chiara">Chiaro</button>
+                  <button data-preset="dark" title="Testo chiaro su fascia scura">Scuro</button>
+                  <button data-preset="plain" title="Solo testo bianco, senza fascia">Nudo</button>
+                  <button data-preset="tag" title="Etichetta piccola in alto">Etichetta</button>
+                </div>
+              </div>
+
+              <h4>Quanto spazio occupa</h4>
+              <button class="btn wide" id="item-fill" title="Allinea l'immagine ai bordi delle slide che sta occupando">Riempi le slide occupate</button>
+              <div class="btn-row">
+                <button class="btn" id="item-narrow" title="Riduci di una slide la larghezza">− una slide</button>
+                <button class="btn" id="item-widen" title="Allarga di una slide, verso destra">+ una slide</button>
+              </div>
+
+              <h4 id="framing-head">Inquadratura</h4>
+              <label class="range-label">Zoom <output id="item-zoom-value">100%</output></label>
+              <input id="item-zoom" type="range" min="100" max="300" value="100" title="Ingrandisce l'immagine dentro il suo riquadro">
+              <label class="range-label">Sposta orizzontale <output id="item-panx-value">50</output></label>
+              <input id="item-panx" type="range" min="0" max="100" value="50">
+              <label class="range-label">Sposta verticale <output id="item-pany-value">50</output></label>
+              <input id="item-pany" type="range" min="0" max="100" value="50">
+
+              <h4>Stile</h4>
+              <div class="field"><span>Cornice</span>
+                <select id="item-frame" title="Bordo attorno all'immagine">
+                  <option value="none">Nessuna</option>
+                  <option value="clean">Bianca</option>
+                  <option value="paper">Carta</option>
+                  <option value="film">Film</option>
+                  <option value="tape">Scotch</option>
+                  <option value="glass">Vetro</option>
+                  <option value="polaroid">Polaroid</option>
+                </select>
+              </div>
+              <label class="range-label">Angoli arrotondati <output id="item-radius-value">12</output></label>
+              <input id="item-radius" type="range" min="0" max="60" value="12">
+              <div class="field"><span>Velo colorato</span><input id="item-tint-color" type="color" value="#000000" title="Tinta stesa sopra questa immagine: scurisce o colora"></div>
+              <label class="range-label">Intensità del velo <output id="item-tint-value">0</output></label>
+              <input id="item-tint" type="range" min="0" max="80" value="0" title="Utile sull'immagine di fondo, per far risaltare quelle sopra">
+              <label class="range-label">Rotazione <output id="item-rotation-value">0°</output></label>
+              <input id="item-rotation" type="range" min="-180" max="180" value="0" title="Oppure trascina la maniglia ↻ sull'angolo dell'immagine">
+              <button class="btn wide" id="item-straighten" title="Riporta l'immagine dritta">Raddrizza</button>
+
+              <h4>Azioni</h4>
+              <div class="btn-row">
+                <button class="btn" id="item-back" title="Manda dietro alle altre immagini">Dietro</button>
+                <button class="btn" id="item-front" title="Porta davanti alle altre immagini">Davanti</button>
+              </div>
+              <div class="btn-row">
+                <button class="btn" id="item-duplicate" title="Crea una copia di questa immagine">Duplica</button>
+                <button class="btn danger" id="item-delete" title="Elimina questa immagine (o premi Canc)">Elimina</button>
+              </div>
+            </div>
+          </details>
+
+          <details class="sec" id="sec-slide">
+            <summary>Composizione della slide</summary>
+            <div class="sec-body">
+              <p class="note">Inseriscono riquadri già disposti sulla slide <b id="recipe-slide">01</b>: poi sostituisci ognuno con la tua immagine.</p>
+              <div class="recipe-grid">
+                <button data-recipe="cover" class="recipe" title="Una foto grande al centro">▤<small>Cover</small></button>
+                <button data-recipe="duo" class="recipe" title="Due foto sfalsate">▧<small>Doppia</small></button>
+                <button data-recipe="triptych" class="recipe" title="Tre foto: due sopra, una sotto">▦<small>Tris</small></button>
+                <button data-recipe="diary" class="recipe" title="Tre foto in diagonale, stile diario">✣<small>Diario</small></button>
+                <button data-recipe="tall" class="recipe" title="Una verticale grande e due dettagli">▥<small>Verticale</small></button>
+                <button data-recipe="contact" class="recipe" title="Quattro provini in griglia">▩<small>Provini</small></button>
+              </div>
+              <button class="btn wide" id="span-recipe" title="Inserisce una foto che occupa due slide, tagliata sul confine">↔ Riquadro a cavallo di 2 slide</button>
+
+              <h4>Ordine e pulizia</h4>
+              <div class="btn-row">
+                <button class="btn" id="move-left" title="Scambia questa slide con quella a sinistra">◀ Sposta</button>
+                <button class="btn" id="move-right" title="Scambia questa slide con quella a destra">Sposta ▶</button>
+              </div>
+              <button class="btn wide" id="duplicate-slide" title="Crea una copia identica di questa slide, subito dopo">Duplica questa slide</button>
+              <div class="btn-row">
+                <button class="btn danger" id="clear-slide" title="Toglie le immagini che stanno solo su questa slide">Svuota</button>
+                <button class="btn danger" id="delete-slide" title="Elimina la slide e le immagini che contiene">Elimina slide</button>
+              </div>
+            </div>
+          </details>
+        </aside>
+
+        <!-- ------------------------------------- the carousel as a whole -->
+        <aside class="col col-left">
+          <div class="scope-head">Tutto il carosello</div>
+
+          <details class="sec" open>
+            <summary>Nome del progetto</summary>
+            <div class="sec-body">
+              <input id="project-title" type="text" maxlength="60" placeholder="Album fotografico" title="Con questo nome lo ritrovi in “Progetti” e nel backup">
+            </div>
+          </details>
+
+          <details class="sec" open>
+            <summary>Formato</summary>
+            <div class="sec-body">
+              <div class="segmented" role="group" aria-label="Formato delle slide">
+                <button class="seg" data-format="4:5" title="Post verticale Instagram, 1080×1350">4:5</button>
+                <button class="seg" data-format="1:1" title="Post quadrato, 1080×1080">1:1</button>
+                <button class="seg" data-format="9:16" title="Storia o reel, 1080×1920">9:16</button>
+              </div>
+              <p class="note" id="format-note">Post verticale · 1080×1350 px</p>
+            </div>
+          </details>
+
+          <details class="sec" open>
+            <summary>Numero di slide</summary>
+            <div class="sec-body">
+              <div class="stepper" title="Quante slide ha il carosello">
+                <button id="less-slides" title="Togli l'ultima slide">−</button>
+                <div><strong id="slide-count-label">4</strong><small>slide totali</small></div>
+                <button id="more-slides" title="Aggiungi una slide in fondo">+</button>
+              </div>
+            </div>
+          </details>
+
+          <details class="sec" open>
+            <summary>Aspetto comune</summary>
+            <div class="sec-body">
+              <div class="field"><span>Colore di fondo</span><input id="bg-color" type="color" value="#1b1b1b" title="Si vede dove non ci sono foto"></div>
+              <label class="check" title="Aggiunge 1/4, 2/4… in basso a ogni slide, anche nell'export"><input id="show-numbers" type="checkbox"> Numera le slide (1/4)</label>
+              <label class="check" title="Mostra i confini tra slide e il margine di sicurezza"><input id="show-guides" type="checkbox" checked> Mostra confini e margini</label>
+              <p class="note" style="margin-top:12px">Le foto restano sul tuo dispositivo. Niente account, niente upload.</p>
+            </div>
+          </details>
+        </aside>
+      </div>
+    </section>
+
+    <section id="layouts-panel" class="panel">
+      <div class="page-intro"><h2>Template</h2><p>Ogni scheda mostra la prima slide e, sotto, l'intero carosello: così vedi subito quali foto attraversano più slide.</p></div>
+      <div id="layout-grid" class="layout-grid"></div>
+    </section>
+
+    <section id="projects-panel" class="panel">
+      <div class="page-intro">
+        <h2>I miei progetti</h2>
+        <p>Salvati sul dispositivo, senza account.</p>
+        <p class="warn" id="storage-note"></p>
+        <label class="btn center" for="open-backup" style="max-width:260px;margin-top:12px" title="Riapri un progetto scaricato come file JSON"><input id="open-backup" type="file" accept="application/json,.json" hidden> Apri un backup JSON</label>
+      </div>
+      <div id="projects-grid" class="projects-grid"></div>
+    </section>
+  </div>
+
+  <div id="toast" class="toast" role="status"></div>
+
+  <dialog id="help-dialog" class="dialog">
+    <h2>Come funziona</h2>
+    <ol class="help-list">
+      <li><b>Striscia unica.</b> Le slide sono affiancate: le linee verticali sono i confini. Ciò che supera un confine finisce su due slide.</li>
+      <li><b>Solo immagini.</b> Non esistono “sfondi”: ci sono immagini, e quella dietro fa da sfondo. I due pulsanti in alto cambiano solo come nasce l'immagine — libera, o già grande quanto la slide e in fondo alla pila.</li>
+      <li><b>Trascina e ridimensiona.</b> Sposti col dito o col mouse, i quadratini allargano, la maniglia ↻ in alto a sinistra ruota. Vicino a un confine la foto si aggancia da sola.</li>
+      <li><b>Riprendere un'immagine.</b> Toccala, oppure usa l'elenco <i>Cosa c'è su questa slide</i>: le elenca dalla cima al fondo, anche quelle coperte.</li>
+      <li><b>Mettere la tua immagine.</b> Doppio tocco su un riquadro (o “Usa una mia immagine qui”): tiene posizione, taglio e cornice.</li>
+      <li><b>Tre ambiti.</b> A destra ciò che riguarda la slide e l'immagine scelta, a sinistra ciò che vale per tutto il carosello.</li>
+      <li><b>Colore e testo.</b> Oltre alle foto puoi inserire un riquadro a tinta unita (anche a tutta slide) e del testo, con carattere, colore e fascia di sfondo. Si spostano e ruotano come le immagini.</li>
+      <li><b>Ripensarci.</b> Ctrl+Z annulla, Ctrl+Shift+Z ripristina, o usa ↶ ↷ in alto. Il lavoro viene salvato da solo: chiudendo e riaprendo lo ritrovi.</li>
+      <li><b>Esporta.</b> Una PNG per slide nel formato scelto, tagliate esattamente sui confini.</li>
+    </ol>
+    <button class="btn primary wide" id="help-close">Ho capito</button>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="dialog">
+    <h2 id="confirm-title">Confermi?</h2>
+    <p id="confirm-text"></p>
+    <div class="btn-row">
+      <button class="btn wide" id="confirm-no">Annulla</button>
+      <button class="btn wide danger" id="confirm-yes">Elimina</button>
+    </div>
+  </dialog>
+
+  <dialog id="export-dialog" class="dialog wide-dialog">
+    <h2>Esporta il carosello</h2>
+    <p id="export-status">Preparo le slide…</p>
+    <div id="export-grid" class="export-grid"></div>
+    <button id="share-pngs" class="btn primary wide hidden">Condividi / salva nelle foto</button>
+    <button id="download-pngs" class="btn wide">Scarica tutte le slide</button>
+    <button id="download-project" class="btn wide">Scarica backup del progetto</button>
+    <button id="close-export" class="btn wide ghost">Chiudi</button>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
