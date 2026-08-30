@@ -9,7 +9,7 @@ global.localStorage = {
 };
 global.indexedDB = { open: () => ({ set onsuccess(_) {}, set onerror(_) {}, set onupgradeneeded(_) {}, set onblocked(_) {} }) };
 
-const { useIndexedDB, putProject, allProjects, deleteProject, storageModeNow } = require('./app.js');
+const { useIndexedDB, putProject, allProjects, deleteProject, storageModeNow, mediaKey, isDirectSrc } = require('./app.js');
 
 (async () => {
   assert.strictEqual(await useIndexedDB(), false, 'a silent IndexedDB must not be used');
@@ -30,6 +30,18 @@ const { useIndexedDB, putProject, allProjects, deleteProject, storageModeNow } =
   // a full disk surfaces as a quota error the UI can explain, not a silent loss
   global.localStorage.setItem = () => { throw new Error('QuotaExceededError'); };
   await assert.rejects(() => putProject({ id: 'c', updated: 4 }), /quota/);
+
+    // media keys are content based: the same bytes must land on the same key, different bytes must not
+  const key = await mediaKey(new Blob([new Uint8Array([1, 2, 3, 4, 5])]));
+  const same = await mediaKey(new Blob([new Uint8Array([1, 2, 3, 4, 5])]));
+  const other = await mediaKey(new Blob([new Uint8Array([1, 2, 3, 4, 6])]));
+  assert.strictEqual(key, same, 'the same picture stored twice must reuse one entry');
+  assert.notStrictEqual(key, other, 'different pictures must not collide');
+
+  // a project can still carry plain data URLs from before the media store existed
+  assert.ok(isDirectSrc('data:image/png;base64,AAAA'));
+  assert.ok(isDirectSrc('blob:http://x/y'));
+  assert.ok(!isDirectSrc('9f2b1c4d'), 'a media id is not a direct source');
 
   console.log('storage fallback OK');
 })();

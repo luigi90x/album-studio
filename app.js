@@ -1,7 +1,7 @@
 const $ = (s, root = document) => root.querySelector(s);
 const $$ = (s, root = document) => [...root.querySelectorAll(s)];
 
-const DB_NAME = 'album-studio', STORE = 'projects';
+const DB_NAME = 'album-studio', STORE = 'projects', MEDIA = 'media';
 
 // Item geometry is relative (x/w in slide widths, y/h as a fraction of slide height), so switching
 // format only changes the aspect ratio everything is drawn into.
@@ -224,8 +224,12 @@ const withTimeout = (promise, ms) => Promise.race([
 
 function openDB() {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = () => request.result.createObjectStore(STORE, { keyPath: 'id' });
+    const request = indexedDB.open(DB_NAME, 2);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE, { keyPath: 'id' });
+      if (!db.objectStoreNames.contains(MEDIA)) db.createObjectStore(MEDIA, { keyPath: 'id' });
+    };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
     request.onblocked = () => reject(new Error('blocked'));
@@ -247,10 +251,10 @@ async function useIndexedDB() {
   return storageMode === 'idb';
 }
 
-function dbRun(mode, run) {
+function dbRun(mode, run, store = STORE) {
   return openDB().then(db => new Promise((resolve, reject) => {
-    const tx = db.transaction(STORE, mode);
-    const request = run(tx.objectStore(STORE));
+    const tx = db.transaction(store, mode);
+    const request = run(tx.objectStore(store));
     tx.oncomplete = () => { db.close(); resolve(request && request.result); };
     tx.onerror = () => reject(tx.error);
     tx.onabort = () => reject(tx.error);
@@ -264,9 +268,11 @@ function localWrite(list) {
 }
 
 async function putProject(value) {
+  // with IndexedDB the project is just structure and ids — the pictures already live in the media
+  // store, so a save is kilobytes. localStorage has nowhere else to keep them, so there they ride along.
   if (await useIndexedDB()) return dbRun('readwrite', store => store.put(value));
   const list = localList().filter(p => p.id !== value.id);
-  list.unshift(value);
+  list.unshift(await withMediaInline(value));
   localWrite(list);
 }
 async function allProjects() {
@@ -276,6 +282,109 @@ async function allProjects() {
 async function deleteProject(id) {
   if (await useIndexedDB()) return dbRun('readwrite', store => store.delete(id));
   localWrite(localList().filter(p => p.id !== id));
+}
+
+/* ---------------------------------------------------------- media store */
+
+// Photos used to live inside the project as base64 strings. That made every save rewrite every
+// picture, and a photo reused in five frames was stored five times. Now the project holds only ids
+// and the files live here as Blobs: no encoding overhead, and the same picture is kept once.
+// Anything that is already a data: or blob: URL still works, so older projects open unchanged.
+const mediaCache = new Map();       // id -> object URL, for this session
+const mediaBlobs = new Map();       // id -> Blob, also the whole store when IndexedDB is unavailable
+
+const isDirectSrc = src => typeof src === 'string' && (src.startsWith('data:') || src.startsWith('blob:') || src.startsWith('http'));
+
+// A content key, so the same file dropped twice is stored once. crypto.subtle needs a secure
+// context and file:// is not one, hence the plain fallback.
+async function mediaKey(blob) {
+  const buffer = await blob.arrayBuffer();
+  if (crypto.subtle) {
+    try {
+      const digest = await crypto.subtle.digest('SHA-256', buffer);
+      return [...new Uint8Array(digest)].slice(0, 12).map(byte => byte.toString(16).padStart(2, '0')).join('');
+    } catch { /* fall through */ }
+  }
+  const bytes = new Uint8Array(buffer);
+  const step = Math.max(1, Math.floor(bytes.length / 4096));
+  let hash = 2166136261;
+  for (let i = 0; i < bytes.length; i += step) {
+    hash ^= bytes[i];
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${blob.size.toString(36)}-${(hash >>> 0).toString(36)}`;
+}
+
+// ponytail: media dropped from every project stay in the store. Clearing them means scanning all
+// saved projects for references — worth doing when the store can actually grow (videos), not now.
+async function putMedia(blob) {
+  const id = await mediaKey(blob);
+  mediaBlobs.set(id, blob);
+  if (await useIndexedDB()) {
+    try { await dbRun('readwrite', store => store.put({ id, blob }), MEDIA); } catch { /* keep it in memory */ }
+  }
+  return id;
+}
+
+async function getMedia(id) {
+  if (mediaBlobs.has(id)) return mediaBlobs.get(id);
+  if (await useIndexedDB()) {
+    try {
+      const found = await dbRun('readonly', store => store.get(id), MEDIA);
+      if (found && found.blob) { mediaBlobs.set(id, found.blob); return found.blob; }
+    } catch { /* nothing stored */ }
+  }
+  return null;
+}
+
+// The URL to actually draw with. Ids resolve to an object URL created once per session.
+function srcOf(item) {
+  const src = item && item.src;
+  if (!src) return '';
+  if (isDirectSrc(src)) return src;
+  return mediaCache.get(src) || '';
+}
+
+// Makes sure every id used by the project has its object URL ready before drawing.
+async function primeMedia(items = project.items) {
+  const missing = [...new Set(items.map(i => i.src).filter(src => src && !isDirectSrc(src) && !mediaCache.has(src)))];
+  for (const id of missing) {
+    const blob = await getMedia(id);
+    if (blob) mediaCache.set(id, URL.createObjectURL(blob));
+  }
+  return missing.length;
+}
+
+const blobToDataURL = blob => new Promise(resolve => {
+  const reader = new FileReader();
+  reader.onload = () => resolve(reader.result);
+  reader.readAsDataURL(blob);
+});
+
+// A project that carries its pictures with it: for the JSON backup, and for localStorage, which
+// has nowhere else to put them.
+async function withMediaInline(source) {
+  const copy = clone(source);
+  for (const item of copy.items || []) {
+    if (!item.src || isDirectSrc(item.src)) continue;
+    const blob = await getMedia(item.src);
+    if (blob) item.src = await blobToDataURL(blob);
+  }
+  return copy;
+}
+
+// The other direction: pictures embedded in a file become entries in the store.
+async function absorbMedia(incoming) {
+  for (const item of incoming.items || []) {
+    if (!item.src || !item.src.startsWith('data:')) continue;
+    try {
+      const blob = await (await fetch(item.src)).blob();
+      const id = await putMedia(blob);
+      mediaCache.set(id, mediaCache.get(id) || URL.createObjectURL(blob));
+      item.src = id;
+    } catch { /* leave the data URL as it is: it still renders */ }
+  }
+  return incoming;
 }
 
 /* --------------------------------------------------------- image input */
@@ -298,7 +407,10 @@ async function importImage(file) {
     canvas.width = Math.round(image.naturalWidth * scale);
     canvas.height = Math.round(image.naturalHeight * scale);
     canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL('image/jpeg', 0.86);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.86));
+    const id = await putMedia(blob);
+    if (!mediaCache.has(id)) mediaCache.set(id, URL.createObjectURL(blob));
+    return id;                       // the project stores the id, the file lives in the media store
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -371,7 +483,7 @@ function buildStrip(host, width, interactive) {
     node.dataset.id = item.id;
     const inside = kind === 'text' ? '<div class="item-text"></div>'
       : kind === 'empty' ? '<div class="item-empty">＋</div>'
-      : (item.src ? `<img src="${item.src}" alt="">` : '');
+      : (item.src ? `<img src="${srcOf(item)}" alt="">` : '');
     node.innerHTML = `<div class="item-box">${inside}<span class="tint"></span></div><span class="tape"></span><span class="outline"></span>`
       // only on the one you picked: on every demo photo at once it covered the pictures
       + (interactive && item.demo && item.id === selectedItem ? '<span class="demo-tag">esempio · 2 tocchi o tieni premuto</span>' : '')
@@ -528,7 +640,7 @@ function renderLayers() {
     const span = spanOf(item);
     const depth = position === 0 ? 'in cima' : position === touching.length - 1 ? 'in fondo' : `livello ${touching.length - position}`;
     const kind = itemKind(item);
-    const thumb = kind === 'image' ? `background-image:url('${item.src}')`
+    const thumb = kind === 'image' ? `background-image:url('${srcOf(item)}')`
       : kind === 'text' ? `background:${item.color || '#fff'};color:${item.fill || '#111'}`
       : `background:${item.fill || '#888'}`;
     const what = kind === 'image' ? 'Immagine'
@@ -709,6 +821,8 @@ function setScope(scope) {
 }
 
 function render() {
+  // an id whose object URL is not ready yet would draw as a blank: fetch it, then draw again
+  primeMedia().then(missing => { if (missing) render(); });
   selectedSlide = clamp(selectedSlide, 0, project.slideCount - 1);
   if (selectedItem && !itemById(selectedItem)) selectedItem = null;
   // expand the photo panel once, when the selection actually changes — never on every render
@@ -1539,7 +1653,7 @@ function stripHTML(items, count, offset) {
     const spec = FRAMES[i.frame] || FRAMES.clean;
     const border = spec.border ? Math.max(1, spec.border / 8) : 0;
     return `<div style="position:absolute;left:${i.x / count * 100}%;top:${i.y * 100}%;width:${i.w / count * 100}%;height:${i.h * 100}%;
-      background-image:url('${i.src}');background-size:cover;background-position:center;
+      background-image:url('${srcOf(i)}');background-size:cover;background-position:center;
       border:${border}px solid ${spec.color};border-bottom-width:${spec.bottom > spec.border ? border * 3 : border}px;
       ${shapePreviewCSS(i)};box-shadow:${i.frame === 'none' ? 'none' : '0 3px 8px #0007'};transform:rotate(${i.rotation}deg)"></div>`;
   }).join('');
@@ -1733,7 +1847,8 @@ async function restoreAutosave() {
   try {
     const found = (await allProjects()).find(p => p.id === AUTOSAVE_ID);
     if (!found || !found.items?.length) return;
-    project = normalize(found);
+    project = await absorbMedia(normalize(found));
+    await primeMedia();
     project.id = found.savedAs || null;      // it is a working copy, not the named project
     applyFormat(project.format);
     selectedSlide = 0;
@@ -1762,9 +1877,10 @@ async function saveProject() {
 
 function openBackup(file) {
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
-      project = normalize(JSON.parse(reader.result));
+      project = await absorbMedia(normalize(JSON.parse(reader.result)));
+      await primeMedia();
       project.id ||= uid();
       applyFormat(project.format);
       selectedSlide = 0;
@@ -1793,8 +1909,9 @@ async function renderProjects() {
       <footer><span>${p.slides?.length || 0} slide · ${new Date(p.updated).toLocaleDateString('it-IT')}</span>
       <span><button data-open="${p.id}">Apri</button><button class="del" data-del="${p.id}" title="Elimina il progetto">Elimina</button></span></footer></article>`;
   }).join('');
-  $$('[data-open]').forEach(b => b.onclick = () => {
-    project = normalize(saved.find(p => p.id === b.dataset.open));
+  $$('[data-open]').forEach(b => b.onclick = async () => {
+    project = await absorbMedia(normalize(saved.find(p => p.id === b.dataset.open)));
+    await primeMedia();
     applyFormat(project.format);
     selectedSlide = 0;
     selectedItem = null;
@@ -1993,7 +2110,7 @@ async function drawSlide(index, imageMap) {
   ctx.fillStyle = project.bgColor;
   ctx.fillRect(0, 0, OUT_W, OUT_H);
   const visible = project.items.filter(i => i.x < index + 1 && i.x + i.w > index);
-  visible.forEach(i => drawItem(ctx, i, imageMap.get(i.src), index));
+  visible.forEach(i => drawItem(ctx, i, imageMap.get(srcOf(i)), index));
   if (project.showNumbers) {
     const label = `${index + 1}/${project.slideCount}`;
     ctx.font = '600 34px Arial';
@@ -2028,7 +2145,8 @@ async function prepareExport() {
   status.textContent = 'Preparo le slide…';
   $('#share-pngs').classList.add('hidden');
   try {
-    const sources = [...new Set(project.items.map(i => i.src).filter(Boolean))];
+    await primeMedia();
+    const sources = [...new Set(project.items.map(srcOf).filter(Boolean))];
     const imageMap = new Map(await Promise.all(sources.map(async src => [src, await loadImage(src)])));
     for (let index = 0; index < project.slideCount; index++) {
       const canvas = await drawSlide(index, imageMap);
@@ -2061,7 +2179,8 @@ async function exportPanorama() {
   const wasLabel = button.textContent;
   button.textContent = 'Preparo…';
   try {
-    const sources = [...new Set(project.items.map(i => i.src).filter(Boolean))];
+    await primeMedia();
+    const sources = [...new Set(project.items.map(srcOf).filter(Boolean))];
     const imageMap = new Map(await Promise.all(sources.map(async src => [src, await loadImage(src)])));
     const canvas = document.createElement('canvas');
     canvas.width = OUT_W * project.slideCount;
@@ -2069,7 +2188,7 @@ async function exportPanorama() {
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = project.bgColor;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    project.items.forEach(item => drawItem(ctx, item, imageMap.get(item.src), 0));
+    project.items.forEach(item => drawItem(ctx, item, imageMap.get(srcOf(item)), 0));
     if (showGuides) {           // thin marks where each slide ends
       ctx.strokeStyle = 'rgba(255,255,255,.45)';
       ctx.setLineDash([14, 14]);
@@ -2108,8 +2227,9 @@ async function downloadPNGs() {
   toast(exported.length > 1 ? 'Se il browser ha scaricato solo la prima, consenti i download multipli o usa “Salva” su ogni slide' : 'Download avviato');
 }
 
-function downloadProject() {
-  const blob = new Blob([JSON.stringify(project, null, 2)], { type: 'application/json' });
+async function downloadProject() {
+  const portable = await withMediaInline(project);   // a backup has to travel with its pictures
+  const blob = new Blob([JSON.stringify(portable, null, 2)], { type: 'application/json' });
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
   link.download = `${(project.title || 'album').toLowerCase().replace(/\s+/g, '-')}.json`;
@@ -2430,6 +2550,6 @@ function init() {
 if (typeof document !== 'undefined') init();
 if (typeof module !== 'undefined') module.exports = {
   remapAfterDelete, remapAfterMove, insideSlide, spanOf, fillOccupiedSlides, normalize,
-  useIndexedDB, putProject, allProjects, deleteProject, storageModeNow: () => storageMode,
+  useIndexedDB, putProject, allProjects, deleteProject, storageModeNow: () => storageMode, mediaKey, isDirectSrc,
   setSlideCount: n => { project.slideCount = n; }
 };
