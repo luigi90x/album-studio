@@ -184,7 +184,10 @@ const SHAPES = {
   arch:    { label: 'Arco' },
   diamond: { label: 'Rombo', points: [[50, 0], [100, 50], [50, 100], [0, 50]] },
   hexagon: { label: 'Esagono', points: [[25, 0], [75, 0], [100, 50], [75, 100], [25, 100], [0, 50]] },
-  leaf:    { label: 'Foglia' }
+  leaf:    { label: 'Foglia' },
+  // ten vertices alternating between the outer and inner radius of a five-pointed star
+  star:    { label: 'Stella', points: [[50, 0], [62.3, 33], [97.6, 34.5], [70, 56.5], [79.4, 90.5],
+                                       [50, 71], [20.6, 90.5], [30, 56.5], [2.4, 34.5], [37.7, 33]] }
 };
 
 // corners: null means "all the same", otherwise [topLeft, topRight, bottomRight, bottomLeft]
@@ -370,7 +373,8 @@ function buildStrip(host, width, interactive) {
       : kind === 'empty' ? '<div class="item-empty">＋</div>'
       : (item.src ? `<img src="${item.src}" alt="">` : '');
     node.innerHTML = `<div class="item-box">${inside}<span class="tint"></span></div><span class="tape"></span><span class="outline"></span>`
-      + (interactive && item.demo ? '<span class="demo-tag">esempio · tocca 2 volte</span>' : '')
+      // only on the one you picked: on every demo photo at once it covered the pictures
+      + (interactive && item.demo && item.id === selectedItem ? '<span class="demo-tag">esempio · tocca 2 volte</span>' : '')
       + (interactive
         ? '<span class="span-tag"></span><span class="handle h-rot" data-dir="rot" title="Trascina per ruotare">↻</span>'
           // the top-left corner is the rotation grip, so resizing uses the other seven
