@@ -252,10 +252,12 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 .section-title{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);margin:6px 0 12px}
 .card-actions{display:flex;gap:5px}
 .card-actions .btn{padding:6px 10px;font-size:11px;min-height:32px}
-.layout-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+.layout-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
 .layout-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .layout-art{aspect-ratio:4/5;position:relative;overflow:hidden}
-.layout-strip{position:relative;display:flex;gap:2px;padding:8px;background:#101013;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.layout-strip{position:relative;display:flex;gap:3px;padding:10px;background:#101013;border-bottom:1px solid var(--line)}
+.layout-strip.tall{padding:12px}
+.layout-strip.tall .mini{border-radius:3px}
 .layout-strip .mini{position:relative;flex:1;aspect-ratio:4/5;overflow:hidden;border-radius:2px;background:#000}
 .layout-strip .mini .strip{position:absolute;top:0;margin:0;box-shadow:none}
 .layout-meta{display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px 0}

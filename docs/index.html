@@ -260,10 +260,12 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 .section-title{font-size:11px;letter-spacing:.11em;text-transform:uppercase;color:var(--muted);margin:6px 0 12px}
 .card-actions{display:flex;gap:5px}
 .card-actions .btn{padding:6px 10px;font-size:11px;min-height:32px}
-.layout-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:16px}
+.layout-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px}
 .layout-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
 .layout-art{aspect-ratio:4/5;position:relative;overflow:hidden}
-.layout-strip{position:relative;display:flex;gap:2px;padding:8px;background:#101013;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.layout-strip{position:relative;display:flex;gap:3px;padding:10px;background:#101013;border-bottom:1px solid var(--line)}
+.layout-strip.tall{padding:12px}
+.layout-strip.tall .mini{border-radius:3px}
 .layout-strip .mini{position:relative;flex:1;aspect-ratio:4/5;overflow:hidden;border-radius:2px;background:#000}
 .layout-strip .mini .strip{position:absolute;top:0;margin:0;box-shadow:none}
 .layout-meta{display:flex;gap:6px;flex-wrap:wrap;padding:10px 12px 0}
@@ -699,7 +701,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
     </section>
 
     <section id="layouts-panel" class="panel">
-      <div class="page-intro"><h2>Template</h2><p>Ogni scheda mostra la prima slide e, sotto, l'intero carosello: così vedi subito quali foto attraversano più slide. Applicane uno e poi riempilo con “Più foto”.</p></div>
+      <div class="page-intro"><h2>Template</h2><p>Ogni scheda mostra il carosello intero, slide per slide. Applicane uno e riempilo con “Più foto”.</p></div>
       <section id="my-templates" class="hidden">
         <h3 class="section-title">I tuoi template</h3>
         <div id="my-template-grid" class="layout-grid"></div>
@@ -2290,6 +2292,16 @@ const TEMPLATES = [
       shaped(2.14, 0.16, 0.72, 0.4, 'pill', s, 2), shaped(2.24, 0.62, 0.52, 0.28, 'circle', s, 1),
       shaped(3.18, 0.18, 0.64, 0.5, 'arch', s, 3)
     ] },
+  { id: 'bubbles-wide', name: 'Bolle sospese', desc: 'Cerchi e ellissi che scavalcano il confine tra una slide e l’altra.', scene: 'coast', color: '#22333d', slides: 4,
+    build: s => [
+      bgSpan(0, 4, s),
+      shaped(0.58, 0.16, 0.72, 0.52, 'circle', s, 1),      // across the first seam
+      shaped(0.18, 0.66, 0.34, 0.24, 'pill', s, 3),
+      shaped(1.62, 0.34, 0.78, 0.46, 'circle', s, 4),      // across the second
+      shaped(1.24, 0.1, 0.3, 0.21, 'circle', s, 2),
+      shaped(2.66, 0.2, 0.68, 0.5, 'circle', s, 3),        // across the third
+      shaped(3.3, 0.72, 0.42, 0.16, 'pill', s, 1)
+    ] },
   { id: 'gems', name: 'Gemme', desc: 'Rombi ed esagoni, per un carosello grafico.', scene: 'garden', color: '#2f3a2c', slides: 4,
     build: s => [
       bgSpan(0, 4, s),
@@ -2325,23 +2337,14 @@ function stripHTML(items, count, offset) {
 function templateCard(template) {
   const items = template.build(template.scene);
   const n = template.slides;
-  const crossing = items.filter(i => spanCount(i, n) > 1).length;
   const minis = Array.from({ length: n }, (_, k) =>
     `<div class="mini" style="background:${template.color}">${stripHTML(items, n, k)}</div>`).join('');
   return `<article class="layout-card">
-    <div class="layout-art" style="background:${template.color}">${stripHTML(items, n, 0)}</div>
-    <div class="layout-strip" title="Le ${n} slide del carosello">${minis}</div>
-    <div class="layout-meta"><span class="chip">${n} slide</span><span class="chip">${items.length} immagini</span>${crossing ? `<span class="chip hot">${crossing} a cavallo</span>` : ''}</div>
+    <div class="layout-strip tall" title="Le ${n} slide del carosello">${minis}</div>
+    <div class="layout-meta"><span class="chip">${n} slide</span><span class="chip">${items.length} immagini</span></div>
     <footer><div><h3>${template.name}</h3><small>${template.desc}</small></div><button class="btn" data-template="${template.id}">Usa</button></footer>
   </article>`;
 }
-
-// span for a template item, independent of the open project
-const spanCount = (item, count) => {
-  const first = Math.max(0, Math.floor(item.x + 0.001));
-  const last = Math.min(count - 1, Math.ceil(item.x + item.w - 0.001) - 1);
-  return Math.max(1, last - first + 1);
-};
 
 /* --------------------------------------------------- templates propri */
 
@@ -2350,8 +2353,7 @@ const MY_TEMPLATES = 'album-studio-templates';
 const readMyTemplates = () => { try { return JSON.parse(localStorage.getItem(MY_TEMPLATES) || '[]'); } catch { return []; } };
 
 // A template is the composition without the photographs: geometry, style and frames are kept, the
-// images are dropped. That keeps it small enough for localStorage and makes it reusable on any set
-// of photos — reopening it gives you empty frames to fill with "Più foto".
+// images become empty frames. Small enough for localStorage, and reusable on any set of photos.
 function saveAsTemplate() {
   if (!project.items.length) { toast('Non c’è niente da salvare come template'); return; }
   const name = (project.title || 'Il mio template').slice(0, 40);
@@ -2365,8 +2367,9 @@ function saveAsTemplate() {
     items: project.items.map(i => ({
       ...i,
       id: undefined,
-      src: itemKind(i) === 'image' ? scene : i.src,
-      demo: itemKind(i) === 'image' || undefined
+      src: itemKind(i) === 'image' || itemKind(i) === 'empty' ? scene : i.src,
+      placeholder: false,
+      demo: itemKind(i) === 'image' || itemKind(i) === 'empty' || undefined
     }))
   };
   try {
@@ -2381,12 +2384,12 @@ function saveAsTemplate() {
 
 function myTemplateCard(template) {
   const items = template.items.map(i => ({ ...newItem(i.src), ...i }));
-  const photos = items.filter(i => itemKind(i) === 'image').length;
-  const minis = Array.from({ length: template.slides }, (_, k) => `<div class="mini" style="background:${template.color}">${stripHTML(items, template.slides, k)}</div>`).join('');
+  const frames = items.filter(i => i.demo).length;
+  const minis = Array.from({ length: template.slides }, (_, k) =>
+    `<div class="mini" style="background:${template.color}">${stripHTML(items, template.slides, k)}</div>`).join('');
   return `<article class="layout-card">
-    <div class="layout-art" style="background:${template.color}">${stripHTML(items, template.slides, 0)}</div>
-    <div class="layout-strip">${minis}</div>
-    <div class="layout-meta"><span class="chip">${template.slides} slide</span><span class="chip">${photos} riquadri</span><span class="chip">${template.format}</span></div>
+    <div class="layout-strip tall">${minis}</div>
+    <div class="layout-meta"><span class="chip">${template.slides} slide</span><span class="chip">${frames} riquadri</span><span class="chip">${template.format}</span></div>
     <footer><div><h3>${template.name}</h3><small>Il tuo template</small></div>
       <span class="card-actions">
         <button class="btn" data-mine="${template.id}">Usa</button>
