@@ -154,7 +154,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 
 .layer{position:absolute;inset:0}
 .layer-hit{z-index:0}
-.layer-items{z-index:1}
+.layer-items{z-index:1;pointer-events:none}   /* the empty parts must let clicks reach the slide below */
 .layer-guide{z-index:6;pointer-events:none}
 
 .slide-cell{position:absolute;top:0;height:100%}
@@ -167,9 +167,13 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 .cell-num{position:absolute;top:-21px;left:0;font-size:10px;color:var(--muted);letter-spacing:.1em}
 .slide-cell.selected .cell-num{color:var(--accent)}
 .slide-cell.selected .cell-frame{box-shadow:inset 0 0 0 1px #d9ff4b55}
+.cell-tools{z-index:7;pointer-events:none}
+.cell-drop{position:absolute;right:6px;top:6px;pointer-events:auto;border:1px solid #ffffff33;background:#0009;color:#fff;
+  border-radius:8px;padding:5px 9px;font-size:10.5px;cursor:pointer;backdrop-filter:blur(4px)}
+.cell-drop:hover{background:var(--danger);border-color:var(--danger);color:#fff}
 .cell-badge{position:absolute;left:5%;bottom:5%;background:#0009;color:#fff;border-radius:20px;padding:4px 9px;font-size:11px}
 
-.item{position:absolute;cursor:grab;touch-action:none}
+.item{position:absolute;cursor:grab;touch-action:none;pointer-events:auto}
 .item.dragging{cursor:grabbing}
 .item .item-box{position:absolute;inset:0;overflow:hidden;background:#111}
 .item img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;display:block}
@@ -385,15 +389,15 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
                 <input id="add-bg" type="file" accept="image/*" multiple hidden>
                 <span class="tool-ico">▭</span><span class="tool-name">Sfondo</span>
               </label>
+              <button class="tool" id="auto-layout" title="Distribuisce sulle slide le immagini che scegli">
+                <span class="tool-ico">⁙</span><span class="tool-name">Più foto</span>
+                <input id="auto-files" type="file" accept="image/*" multiple hidden>
+              </button>
               <button class="tool" id="add-color" title="Riquadro a tinta unita che riempie la slide">
                 <span class="tool-ico">■</span><span class="tool-name">Colore</span>
               </button>
               <button class="tool" id="add-text" title="Titolo, didascalia o etichetta">
                 <span class="tool-ico">T</span><span class="tool-name">Testo</span>
-              </button>
-              <button class="tool" id="auto-layout" title="Distribuisce sulle slide le immagini che scegli">
-                <span class="tool-ico">⁙</span><span class="tool-name">Più foto</span>
-                <input id="auto-files" type="file" accept="image/*" multiple hidden>
               </button>
             </div>
 
@@ -513,13 +517,30 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
                 <select id="item-look" title="Applicato anche nell'export, identico a quello che vedi">
                   <option value="none">Naturale</option>
                   <option value="bw">Bianco e nero</option>
+                  <option value="bwhard">B/N contrastato</option>
                   <option value="warm">Caldo</option>
                   <option value="cold">Freddo</option>
+                  <option value="golden">Ora d'oro</option>
                   <option value="faded">Sbiadito</option>
                   <option value="film">Pellicola</option>
                   <option value="punch">Deciso</option>
+                  <option value="sepia">Seppia</option>
+                  <option value="pastel">Pastello</option>
+                  <option value="night">Notte</option>
+                  <option value="mono">Monocromo blu</option>
                 </select>
               </div>
+              <label class="range-label">Esposizione <output id="item-exposure-value">0</output></label>
+              <input id="item-exposure" type="range" min="-50" max="50" value="0" title="Schiarisce o scurisce tutta l'immagine">
+              <label class="range-label">Contrasto <output id="item-contrast-value">0</output></label>
+              <input id="item-contrast" type="range" min="-50" max="60" value="0">
+              <label class="range-label">Ombre <output id="item-shadows-value">0</output></label>
+              <input id="item-shadows" type="range" min="0" max="60" value="0" title="Schiarisce le zone scure senza bruciare il resto">
+              <label class="range-label">Saturazione <output id="item-saturation-value">0</output></label>
+              <input id="item-saturation" type="range" min="-100" max="60" value="0">
+              <label class="range-label">Temperatura <output id="item-warmth-value">0</output></label>
+              <input id="item-warmth" type="range" min="-60" max="60" value="0" title="Verso il blu o verso l'arancio">
+              <button class="btn wide" id="item-reset-look" title="Riporta effetto e regolazioni a zero">Azzera regolazioni</button>
               <label class="range-label">Grana <output id="item-grain-value">0</output></label>
               <input id="item-grain" type="range" min="0" max="100" value="0" title="Rumore di pellicola">
               <label class="range-label">Vignettatura <output id="item-vignette-value">0</output></label>
@@ -736,6 +757,7 @@ const newItem = (src, over) => ({
   rotation: 0, radius: 12, frame: 'clean',
   tintColor: '#000000', tintOpacity: 0,
   look: 'none', grain: 0, vignette: 0,
+  exposure: 0, contrast: 0, saturation: 0, warmth: 0, shadows: 0,
   ...over
 });
 const newProject = () => ({
@@ -847,14 +869,36 @@ const FONTS = {
 // Photo looks, written as CSS filter strings: canvas accepts the very same syntax through
 // ctx.filter, so screen and export cannot drift apart.
 const LOOKS = {
-  none:   { label: 'Naturale', css: '' },
-  bw:     { label: 'Bianco e nero', css: 'grayscale(1) contrast(1.08)' },
-  warm:   { label: 'Caldo', css: 'saturate(1.15) sepia(.28) contrast(1.04)' },
-  cold:   { label: 'Freddo', css: 'saturate(1.1) hue-rotate(-12deg) brightness(1.03)' },
-  faded:  { label: 'Sbiadito', css: 'saturate(.72) contrast(.9) brightness(1.08)' },
-  film:   { label: 'Pellicola', css: 'saturate(.9) contrast(1.18) sepia(.12)' },
-  punch:  { label: 'Deciso', css: 'saturate(1.35) contrast(1.15)' }
+  none:    { label: 'Naturale', css: '' },
+  bw:      { label: 'Bianco e nero', css: 'grayscale(1) contrast(1.08)' },
+  bwhard:  { label: 'B/N contrastato', css: 'grayscale(1) contrast(1.45) brightness(1.04)' },
+  warm:    { label: 'Caldo', css: 'saturate(1.15) sepia(.28) contrast(1.04)' },
+  cold:    { label: 'Freddo', css: 'saturate(1.1) hue-rotate(-12deg) brightness(1.03)' },
+  faded:   { label: 'Sbiadito', css: 'saturate(.72) contrast(.9) brightness(1.08)' },
+  film:    { label: 'Pellicola', css: 'saturate(.9) contrast(1.18) sepia(.12)' },
+  punch:   { label: 'Deciso', css: 'saturate(1.35) contrast(1.15)' },
+  sepia:   { label: 'Seppia', css: 'sepia(.75) contrast(1.05) brightness(1.02)' },
+  pastel:  { label: 'Pastello', css: 'saturate(.85) brightness(1.12) contrast(.92)' },
+  night:   { label: 'Notte', css: 'brightness(.82) contrast(1.2) hue-rotate(-18deg) saturate(1.1)' },
+  golden:  { label: 'Ora d’oro', css: 'sepia(.35) saturate(1.3) brightness(1.06) hue-rotate(-8deg)' },
+  mono:    { label: 'Monocromo blu', css: 'grayscale(1) sepia(.5) hue-rotate(180deg) saturate(1.6)' }
 };
+
+// Free adjustments on top of the chosen look. Neutral is 0 for all of them, which keeps a project
+// saved before this feature looking exactly as it did.
+function adjustmentCSS(item) {
+  const parts = [];
+  if (item.exposure) parts.push(`brightness(${1 + item.exposure / 100})`);
+  if (item.contrast) parts.push(`contrast(${1 + item.contrast / 100})`);
+  if (item.saturation) parts.push(`saturate(${1 + item.saturation / 100})`);
+  if (item.warmth) parts.push(item.warmth > 0 ? `sepia(${item.warmth / 140})` : `hue-rotate(${item.warmth * 0.35}deg)`);
+  // "ombre": lifting the blacks is a brightness push held back by less contrast
+  if (item.shadows) parts.push(`brightness(${1 + item.shadows / 260}) contrast(${1 - item.shadows / 320})`);
+  return parts.join(' ');
+}
+
+const photoCSS = (item, frameFilter) =>
+  [frameFilter, (LOOKS[item.look] || LOOKS.none).css, adjustmentCSS(item)].filter(Boolean).join(' ');
 
 // three shapes of the same item: a photo, a solid block, or a piece of text
 const itemKind = item => (item.text !== undefined && item.text !== null ? 'text' : item.src ? 'image' : 'colour');
@@ -991,6 +1035,15 @@ function buildStrip(host, width, interactive) {
       + (project.showNumbers ? `<div class="cell-badge">${index + 1}/${count}</div>` : '');
     guideLayer.append(guide);
 
+    // the selected slide carries its own delete button, so it can go without hunting in a panel
+    if (interactive && index === selectedSlide && project.slideCount > MIN_SLIDES) {
+      const drop = place(document.createElement('div'));
+      drop.className = 'slide-cell cell-tools';
+      drop.innerHTML = `<button class="cell-drop" title="Elimina questa slide">✕ slide</button>`;
+      $('.cell-drop', drop).onclick = event => { event.stopPropagation(); deleteSlide(); };
+      guideLayer.append(drop);   // the guide layer ignores pointers, the button opts back in
+    }
+
     if (interactive) {
       const hit = place(document.createElement('div'));
       hit.className = 'slide-cell cell-hit';
@@ -1068,7 +1121,7 @@ function styleItem(node, item, width) {
     img.style.objectPosition = `${item.panX}% ${item.panY}%`;
     img.style.transform = `scale(${item.zoom / 100})`;
     img.style.transformOrigin = `${item.panX}% ${item.panY}%`;
-    img.style.filter = [spec.filter, (LOOKS[item.look] || LOOKS.none).css].filter(Boolean).join(' ');
+    img.style.filter = photoCSS(item, spec.filter);
   }
   const tint = $('.tint', node);
   if (tint) {
@@ -1256,12 +1309,13 @@ function renderInspector() {
   if (kind === 'colour') $('#item-fill-color').value = item.fill || '#888888';
   $('#text-controls').classList.toggle('hidden', kind !== 'text');
   $('#item-replace').parentElement.classList.toggle('hidden', kind === 'text');
-  ['#framing-head', '#item-zoom', '#item-panx', '#item-pany', '#look-head', '#item-grain', '#item-vignette']
+  ['#framing-head', '#item-zoom', '#item-panx', '#item-pany', '#look-head', '#item-grain', '#item-vignette',
+   '#item-reset-look', '#item-exposure', '#item-contrast', '#item-shadows', '#item-saturation', '#item-warmth']
     .forEach(sel => $(sel).classList.toggle('hidden', !isPhoto));
   $('#item-look').parentElement.classList.toggle('hidden', !isPhoto);
   $$('#sec-item .range-label').forEach(label => {
     const target = label.nextElementSibling;
-    if (target && ['item-zoom', 'item-panx', 'item-pany', 'item-grain', 'item-vignette'].includes(target.id)) label.classList.toggle('hidden', !isPhoto);
+    if (target && ['item-zoom', 'item-panx', 'item-pany', 'item-grain', 'item-vignette', 'item-exposure', 'item-contrast', 'item-shadows', 'item-saturation', 'item-warmth'].includes(target.id)) label.classList.toggle('hidden', !isPhoto);
   });
   $('#replace-label').textContent = kind === 'colour' ? '↑ Metti un\'immagine al posto del colore' : '↑ Usa una mia immagine qui';
   if (kind === 'text') {
@@ -1284,6 +1338,16 @@ function renderInspector() {
   $('#item-grain-value').value = item.grain || 0;
   $('#item-vignette').value = item.vignette || 0;
   $('#item-vignette-value').value = item.vignette || 0;
+  $('#item-exposure').value = item.exposure || 0;
+  $('#item-exposure-value').value = item.exposure || 0;
+  $('#item-contrast').value = item.contrast || 0;
+  $('#item-contrast-value').value = item.contrast || 0;
+  $('#item-shadows').value = item.shadows || 0;
+  $('#item-shadows-value').value = item.shadows || 0;
+  $('#item-saturation').value = item.saturation || 0;
+  $('#item-saturation-value').value = item.saturation || 0;
+  $('#item-warmth').value = item.warmth || 0;
+  $('#item-warmth-value').value = item.warmth || 0;
   $('#item-tint-color').value = item.tintColor;
   $('#item-tint').value = item.tintOpacity;
   $('#item-tint-value').value = item.tintOpacity;
@@ -1569,21 +1633,37 @@ function addItem(src, how = 'free') {
 
 // A slide that is just a colour: same item, with a fill instead of a photo. Goes to the bottom of
 // the stack and covers the slide, which is what "sfondo a tinta unita" means in practice.
-// "Più foto" reads the situation instead of always doing the same thing:
-//   1. there are empty template frames  -> fill them, in reading order
-//   2. the strip is empty               -> compose a carousel sized on how many photos there are
-//   3. there is already work of yours   -> append the photos as new full-slide slides
-// Photos left over after filling frames become new slides, up to the maximum.
+// "Più foto" works within the carousel you have set up: the number of slides you chose is the
+// frame, never something to grow silently. Photos are spread over those slides, more than one per
+// slide when there are many, with a different arrangement on neighbouring slides.
 const readingOrder = (a, b) => (firstSlideOf(a) - firstSlideOf(b)) || (a.y - b.y) || (a.x - b.x);
+const pick = list => list[Math.floor(Math.random() * list.length)];
 
-// how many photos per slide reads well for a given batch
-function shapeFor(count) {
-  if (count <= 5) return 1;
-  if (count <= 10) return 2;
-  if (count <= 15) return 3;
-  return 4;
+// how many photos land on each slide, spreading the remainder over the first ones
+function spread(total, slides) {
+  const base = Math.floor(total / slides);
+  const extra = total % slides;
+  return Array.from({ length: slides }, (_, i) => base + (i < extra ? 1 : 0));
 }
-const RECIPE_FOR = { 1: null, 2: 'duo', 3: 'triptych', 4: 'contact' };
+
+const MAX_PER_SLIDE = 5;
+
+function composeSlide(slideIndex, sources, style, avoid) {
+  const options = (ARRANGEMENTS[sources.length] || ARRANGEMENTS[5]).filter(name => name !== avoid);
+  const arrangement = pick(options.length ? options : ARRANGEMENTS[sources.length] || ARRANGEMENTS[5]);
+  const spots = RECIPES[arrangement];
+  sources.forEach((src, index) => {
+    const [x, y, w, h, radius] = spots[index % spots.length];
+    const fullBleed = arrangement === 'full';
+    project.items.push(newItem(src, {
+      x: slideIndex + x, y, w, h,
+      radius: fullBleed ? 0 : radius,
+      frame: fullBleed ? 'none' : style.frame,
+      rotation: fullBleed || !style.tilt ? 0 : (index % 2 ? style.tilt : -style.tilt)
+    }));
+  });
+  return arrangement;
+}
 
 async function autoLayout(files) {
   const list = [...files].filter(f => f.type.startsWith('image/'));
@@ -1597,37 +1677,33 @@ async function autoLayout(files) {
   if (!sources.length) return;
 
   pushUndo();
-  const frames = project.items.filter(i => i.demo && itemKind(i) === 'image').sort(readingOrder);
   let used = 0;
 
-  if (frames.length) {
-    // 1. fill what the template already laid out
-    frames.forEach(frame => {
-      if (used >= sources.length) return;
-      frame.src = sources[used++];
-      frame.demo = false;
-    });
-  } else if (!project.items.length) {
-    // 2. nothing on the strip: build the carousel around the batch
-    const perSlide = shapeFor(sources.length);
-    const slides = Math.min(MAX_SLIDES, Math.ceil(sources.length / perSlide));
-    project.slideCount = slides;
-    for (let slide = 0; slide < slides && used < sources.length; slide++) {
-      const recipe = RECIPE_FOR[perSlide];
-      const spots = recipe ? RECIPES[recipe] : [[0, 0, 1, 1, 0]];
-      spots.forEach(([x, y, w, h, radius]) => {
-        if (used >= sources.length) return;
-        project.items.push(newItem(sources[used++], recipe
-          ? { x: slide + x, y, w, h, radius, frame: 'clean', rotation: 0 }
-          : { x: slide, y: 0, w: 1, h: 1, frame: 'none', radius: 0 }));
-      });
-    }
-  }
+  // 1. a template's empty frames come first: that is what they are there for
+  const frames = project.items.filter(i => i.demo && itemKind(i) === 'image').sort(readingOrder);
+  frames.forEach(frame => {
+    if (used >= sources.length) return;
+    frame.src = sources[used++];
+    frame.demo = false;
+  });
 
-  // 3. whatever is left becomes a new full-slide image at the end
-  while (used < sources.length && project.slideCount < MAX_SLIDES) {
-    const slide = project.slideCount++;
-    project.items.unshift(newItem(sources[used++], { x: slide, y: 0, w: 1, h: 1, frame: 'none', radius: 0 }));
+  // 2. the rest is arranged over the slides that already exist, never adding any
+  const left = sources.slice(used);
+  if (left.length) {
+    const freeSlides = Array.from({ length: project.slideCount }, (_, i) => i)
+      .filter(i => !project.items.some(item => insideSlide(item, i) || (item.x < i + 1 && item.x + item.w > i)));
+    const targets = freeSlides.length ? freeSlides : Array.from({ length: project.slideCount }, (_, i) => i);
+    const perSlide = spread(Math.min(left.length, targets.length * MAX_PER_SLIDE), targets.length);
+    const style = pick(STYLES);
+    let taken = 0, previous = null;
+    targets.forEach((slide, position) => {
+      const count = perSlide[position];
+      if (!count) return;
+      previous = composeSlide(slide, left.slice(taken, taken + count), style, previous);
+      taken += count;
+    });
+    used += taken;
+    if (taken) lastComposition = style.name;
   }
 
   selectedItem = null;
@@ -1636,11 +1712,13 @@ async function autoLayout(files) {
   fitZoom();
   const leftOver = sources.length - used;
   toast(leftOver
-    ? `${used} foto sistemate — ${leftOver} non entrano nel massimo di ${MAX_SLIDES} slide`
-    : frames.length
+    ? `${used} foto sistemate su ${project.slideCount} slide — ${leftOver} non entrano: aggiungi slide e ripeti`
+    : frames.length && used === frames.length
       ? `${used} foto inserite nei riquadri del template`
-      : `${used} foto disposte su ${project.slideCount} slide`);
+      : `${used} foto disposte su ${project.slideCount} slide, stile ${lastComposition || 'pulito'}`);
 }
+
+let lastComposition = null;
 
 function addTextItem() {
   pushUndo();
@@ -1776,8 +1854,33 @@ const RECIPES = {
   triptych: [[.06, .12, .43, .38, 8], [.52, .12, .42, .38, 8], [.14, .55, .72, .33, 8]],
   diary:    [[.09, .11, .48, .42, 10], [.44, .38, .48, .42, 10], [.18, .66, .36, .22, 10]],
   tall:     [[.08, .1, .4, .74, 8], [.53, .16, .39, .3, 8], [.53, .52, .39, .3, 8]],
-  contact:  [[.06, .08, .42, .36, 4], [.52, .08, .42, .36, 4], [.06, .5, .42, .36, 4], [.52, .5, .42, .36, 4]]
+  contact:  [[.06, .08, .42, .36, 4], [.52, .08, .42, .36, 4], [.06, .5, .42, .36, 4], [.52, .5, .42, .36, 4]],
+  full:     [[0, 0, 1, 1, 0]],
+  stack:    [[.11, .07, .78, .41, 10], [.11, .52, .78, .41, 10]],
+  offset:   [[.04, .1, .56, .46, 10], [.42, .44, .54, .46, 10]],
+  scatter:  [[.05, .06, .45, .4, 8], [.53, .14, .42, .36, 8], [.09, .52, .42, .38, 8], [.55, .56, .4, .36, 8]],
+  five:     [[.05, .05, .43, .34, 5], [.52, .05, .43, .34, 5], [.05, .42, .43, .34, 5], [.52, .42, .43, .34, 5], [.24, .78, .52, .18, 5]]
 };
+
+// Which arrangements suit a given number of photos on one slide. Neighbouring slides take different
+// ones, so a generated carousel has rhythm instead of four identical pages.
+const ARRANGEMENTS = {
+  1: ['full', 'cover'],
+  2: ['duo', 'stack', 'offset'],
+  3: ['triptych', 'diary', 'tall'],
+  4: ['contact', 'scatter'],
+  5: ['five']
+};
+
+// A single look for the whole carousel: coherent, but picked fresh each time so two runs on the
+// same photos do not give the same album.
+const STYLES = [
+  { name: 'pulito', frame: 'clean', tilt: 0 },
+  { name: 'polaroid', frame: 'polaroid', tilt: 3 },
+  { name: 'carta', frame: 'paper', tilt: 2 },
+  { name: 'pellicola', frame: 'film', tilt: 0 },
+  { name: 'senza cornice', frame: 'none', tilt: 0 }
+];
 
 function applyRecipe(name) {
   pushUndo();
@@ -2250,7 +2353,7 @@ function drawItem(ctx, item, image, index) {
     // object-fit: cover with object-position panX/panY, then the zoom scale
     const scale = Math.max(iw / image.naturalWidth, ih / image.naturalHeight) * (item.zoom / 100);
     const dw = image.naturalWidth * scale, dh = image.naturalHeight * scale;
-    const look = [spec.filter, (LOOKS[item.look] || LOOKS.none).css].filter(Boolean).join(' ');
+    const look = photoCSS(item, spec.filter);
     if (look) ctx.filter = look;
     ctx.drawImage(image, ix - (dw - iw) * (item.panX / 100), iy - (dh - ih) * (item.panY / 100), dw, dh);
     ctx.filter = 'none';
@@ -2532,6 +2635,19 @@ function init() {
   $('#item-look').onchange = () => { const i = selected(); if (i) { pushUndo(); i.look = $('#item-look').value; render(); } };
   bindRange('#item-grain', 'grain');
   bindRange('#item-vignette', 'vignette');
+  bindRange('#item-exposure', 'exposure');
+  bindRange('#item-contrast', 'contrast');
+  bindRange('#item-shadows', 'shadows');
+  bindRange('#item-saturation', 'saturation');
+  bindRange('#item-warmth', 'warmth');
+  $('#item-reset-look').onclick = () => {
+    const i = selected();
+    if (!i) return;
+    pushUndo();
+    Object.assign(i, { look: 'none', grain: 0, vignette: 0, exposure: 0, contrast: 0, shadows: 0, saturation: 0, warmth: 0 });
+    render();
+    toast('Regolazioni azzerate');
+  };
   $('#item-fill').onclick = () => { const i = selected(); if (i) { pushUndo(); fillOccupiedSlides(i); render(); toast('Foto allineata ai bordi delle slide'); } };
   $('#item-widen').onclick = () => { const i = selected(); if (i) { pushUndo(); i.w = Math.min(i.w + 1, project.slideCount - i.x); render(); } };
   $('#item-narrow').onclick = () => { const i = selected(); if (i) { pushUndo(); i.w = Math.max(MIN_W, i.w - 1); render(); } };

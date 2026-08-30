@@ -38,15 +38,15 @@
                 <input id="add-bg" type="file" accept="image/*" multiple hidden>
                 <span class="tool-ico">▭</span><span class="tool-name">Sfondo</span>
               </label>
+              <button class="tool" id="auto-layout" title="Distribuisce sulle slide le immagini che scegli">
+                <span class="tool-ico">⁙</span><span class="tool-name">Più foto</span>
+                <input id="auto-files" type="file" accept="image/*" multiple hidden>
+              </button>
               <button class="tool" id="add-color" title="Riquadro a tinta unita che riempie la slide">
                 <span class="tool-ico">■</span><span class="tool-name">Colore</span>
               </button>
               <button class="tool" id="add-text" title="Titolo, didascalia o etichetta">
                 <span class="tool-ico">T</span><span class="tool-name">Testo</span>
-              </button>
-              <button class="tool" id="auto-layout" title="Distribuisce sulle slide le immagini che scegli">
-                <span class="tool-ico">⁙</span><span class="tool-name">Più foto</span>
-                <input id="auto-files" type="file" accept="image/*" multiple hidden>
               </button>
             </div>
 
@@ -166,13 +166,30 @@
                 <select id="item-look" title="Applicato anche nell'export, identico a quello che vedi">
                   <option value="none">Naturale</option>
                   <option value="bw">Bianco e nero</option>
+                  <option value="bwhard">B/N contrastato</option>
                   <option value="warm">Caldo</option>
                   <option value="cold">Freddo</option>
+                  <option value="golden">Ora d'oro</option>
                   <option value="faded">Sbiadito</option>
                   <option value="film">Pellicola</option>
                   <option value="punch">Deciso</option>
+                  <option value="sepia">Seppia</option>
+                  <option value="pastel">Pastello</option>
+                  <option value="night">Notte</option>
+                  <option value="mono">Monocromo blu</option>
                 </select>
               </div>
+              <label class="range-label">Esposizione <output id="item-exposure-value">0</output></label>
+              <input id="item-exposure" type="range" min="-50" max="50" value="0" title="Schiarisce o scurisce tutta l'immagine">
+              <label class="range-label">Contrasto <output id="item-contrast-value">0</output></label>
+              <input id="item-contrast" type="range" min="-50" max="60" value="0">
+              <label class="range-label">Ombre <output id="item-shadows-value">0</output></label>
+              <input id="item-shadows" type="range" min="0" max="60" value="0" title="Schiarisce le zone scure senza bruciare il resto">
+              <label class="range-label">Saturazione <output id="item-saturation-value">0</output></label>
+              <input id="item-saturation" type="range" min="-100" max="60" value="0">
+              <label class="range-label">Temperatura <output id="item-warmth-value">0</output></label>
+              <input id="item-warmth" type="range" min="-60" max="60" value="0" title="Verso il blu o verso l'arancio">
+              <button class="btn wide" id="item-reset-look" title="Riporta effetto e regolazioni a zero">Azzera regolazioni</button>
               <label class="range-label">Grana <output id="item-grain-value">0</output></label>
               <input id="item-grain" type="range" min="0" max="100" value="0" title="Rumore di pellicola">
               <label class="range-label">Vignettatura <output id="item-vignette-value">0</output></label>
