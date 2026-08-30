@@ -60,13 +60,18 @@
             <div id="preview-track" class="preview-track hidden"></div>
           </div>
           <div class="ruler-wrap"><div id="ruler" class="ruler"></div></div>
+          <nav class="tabbar" id="tabbar" aria-label="Sezioni">
+            <button data-scope="item" class="tab-scope active">Elemento</button>
+            <button data-scope="slide" class="tab-scope">Slide</button>
+            <button data-scope="carousel" class="tab-scope">Carosello</button>
+          </nav>
         </section>
 
         <!-- ------------------------------- what you selected: slide, photo -->
         <aside class="col col-right">
-          <div class="scope-head">Slide <b id="sel-slide-label">01</b> di <span id="slide-count-inline">4</span></div>
+          <div class="scope-head" data-scope="slide item">Slide <b id="sel-slide-label">01</b> di <span id="slide-count-inline">4</span></div>
 
-          <details class="sec" open id="sec-layers">
+          <details class="sec" open id="sec-layers" data-scope="slide">
             <summary>Cosa c'è su questa slide <span class="pill" id="layers-count">0</span></summary>
             <div class="sec-body">
               <p class="note">Tocca una riga per riprendere quell'elemento, anche se è coperto.</p>
@@ -74,7 +79,7 @@
             </div>
           </details>
 
-          <details class="sec hidden" open id="sec-item">
+          <details class="sec hidden" open id="sec-item" data-scope="item">
             <summary><span id="sel-kind-label">Immagine selezionata</span> <span class="pill" id="sel-span-label">1 slide</span></summary>
             <div class="sec-body">
               <label class="btn primary wide center" for="item-replace" title="Scegli un'immagine dal dispositivo: prende posizione, taglio e cornice di questa"><input id="item-replace" type="file" accept="image/*" hidden><span id="replace-label">↑ Usa una mia immagine qui</span></label>
@@ -177,7 +182,7 @@
             </div>
           </details>
 
-          <details class="sec" id="sec-slide">
+          <details class="sec" id="sec-slide" data-scope="slide">
             <summary>Composizione della slide</summary>
             <div class="sec-body">
               <p class="note">Inseriscono riquadri già disposti sulla slide <b id="recipe-slide">01</b>: poi sostituisci ognuno con la tua immagine.</p>
@@ -207,16 +212,16 @@
 
         <!-- ------------------------------------- the carousel as a whole -->
         <aside class="col col-left">
-          <div class="scope-head">Tutto il carosello</div>
+          <div class="scope-head" data-scope="carousel">Tutto il carosello</div>
 
-          <details class="sec" open>
+          <details class="sec" open data-scope="carousel">
             <summary>Nome del progetto</summary>
             <div class="sec-body">
               <input id="project-title" type="text" maxlength="60" placeholder="Album fotografico" title="Con questo nome lo ritrovi in “Progetti” e nel backup">
             </div>
           </details>
 
-          <details class="sec" open>
+          <details class="sec" open data-scope="carousel">
             <summary>Formato</summary>
             <div class="sec-body">
               <div class="segmented" role="group" aria-label="Formato delle slide">
@@ -228,7 +233,7 @@
             </div>
           </details>
 
-          <details class="sec" open>
+          <details class="sec" open data-scope="carousel">
             <summary>Numero di slide</summary>
             <div class="sec-body">
               <div class="stepper" title="Quante slide ha il carosello">
@@ -239,7 +244,7 @@
             </div>
           </details>
 
-          <details class="sec" open>
+          <details class="sec" open data-scope="carousel">
             <summary>Aspetto comune</summary>
             <div class="sec-body">
               <div class="field"><span>Colore di fondo</span><input id="bg-color" type="color" value="#1b1b1b" title="Si vede dove non ci sono foto"></div>
@@ -269,6 +274,16 @@
   </div>
 
   <div id="toast" class="toast" role="status"></div>
+
+  <div id="context-menu" class="context-menu hidden" role="menu">
+    <button data-act="replace">Sostituisci immagine</button>
+    <button data-act="duplicate">Duplica</button>
+    <button data-act="front">Porta davanti</button>
+    <button data-act="back">Manda dietro</button>
+    <button data-act="fill">Riempi le slide occupate</button>
+    <button data-act="straighten">Raddrizza</button>
+    <button data-act="delete" class="danger">Elimina</button>
+  </div>
 
   <dialog id="help-dialog" class="dialog">
     <h2>Come funziona</h2>

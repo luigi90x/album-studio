@@ -288,6 +288,7 @@ function buildStrip(host, width, interactive) {
   project.items.forEach(item => {
     const node = document.createElement('div');
     node.className = `item frame-${item.frame} ${item.id === selectedItem && interactive ? 'selected' : ''} ${spanOf(item) > 1 ? 'spanning' : ''} ${item.demo ? 'demo' : ''}`;
+    node.dataset.id = item.id;
     // one object, three shapes: a photo, a solid colour block, or text
     const inside = itemKind(item) === 'text'
       ? `<div class="item-text"></div>`
@@ -361,7 +362,7 @@ function renderStrip() {
   if (!project.items.length) {
     const hint = document.createElement('div');
     hint.className = 'strip-empty';
-    hint.innerHTML = '<b>Aggiungi uno sfondo o una foto</b><small>Poi trascinala: può coprire quante slide vuoi.</small>';
+    hint.innerHTML = '<b>Aggiungi la prima immagine</b><small>Trascinala dove vuoi: può coprire quante slide vuoi.</small>';
     strip.append(hint);
   }
 }
@@ -426,12 +427,23 @@ function renderLayers() {
     const what = kind === 'image' ? 'Immagine'
       : kind === 'text' ? `“${(item.text || '').split('\n')[0].slice(0, 18) || 'Testo'}”`
       : 'Colore';
-    return `<button class="layer-row ${item.id === selectedItem ? 'active' : ''}" data-pick="${item.id}">
-      <span class="layer-thumb" style="${thumb}"></span>
-      <span class="layer-text"><b>${span > 1 ? `${what} · ${span} slide` : what}</b><small>${depth}${item.demo ? ' · esempio' : ''}</small></span>
-    </button>`;
+    return `<div class="layer-row ${item.id === selectedItem ? 'active' : ''}">
+      <button class="layer-pick" data-pick="${item.id}">
+        <span class="layer-thumb" style="${thumb}"></span>
+        <span class="layer-text"><b>${span > 1 ? `${what} · ${span} slide` : what}</b><small>${depth}${item.demo ? ' · esempio' : ''}</small></span>
+      </button>
+      <button class="layer-del" data-drop="${item.id}" title="Elimina questo elemento" aria-label="Elimina">×</button>
+    </div>`;
   }).join('');
   $$('[data-pick]', list).forEach(b => b.onclick = () => { selectedItem = b.dataset.pick; render(); });
+  $$('[data-drop]', list).forEach(b => b.onclick = event => {
+    event.stopPropagation();
+    pushUndo();
+    project.items = project.items.filter(i => i.id !== b.dataset.drop);
+    if (selectedItem === b.dataset.drop) selectedItem = null;
+    render();
+    toast('Elemento eliminato — annulla con ↶');
+  });
   if (hadFocus) $(`[data-pick="${hadFocus}"]`, list)?.focus();   // keyboard focus survives the rebuild
 }
 
@@ -510,12 +522,29 @@ function renderInspector() {
 }
 
 let shownItem = null;
+let activeScope = 'slide';   // which panel group the phone tab bar is showing
+
+// On a phone the three scopes (element / slide / carousel) become tabs instead of one long scroll.
+// Same three scopes as the desktop columns, so what you learn on one works on the other.
+function setScope(scope) {
+  activeScope = scope;
+  $$('.tab-scope').forEach(tab => tab.classList.toggle('active', tab.dataset.scope === scope));
+  $$('[data-scope]').forEach(section => {
+    if (section.classList.contains('tab-scope')) return;
+    section.classList.toggle('off-scope', !section.dataset.scope.split(' ').includes(scope));
+  });
+  $('.tab-scope[data-scope="item"]').disabled = !selectedItem;
+}
 
 function render() {
   selectedSlide = clamp(selectedSlide, 0, project.slideCount - 1);
   if (selectedItem && !itemById(selectedItem)) selectedItem = null;
   // expand the photo panel once, when the selection actually changes — never on every render
-  if (selectedItem && selectedItem !== shownItem) $('#sec-item').open = true;
+  if (selectedItem && selectedItem !== shownItem) {
+    $('#sec-item').open = true;
+    setScope('item');                       // on a phone, jump to what you just picked
+  }
+  if (!selectedItem && shownItem) setScope('slide');
   shownItem = selectedItem;
   $('#strip-scroll').classList.toggle('hidden', mode !== 'edit');
   $('#preview-track').classList.toggle('hidden', mode !== 'preview');
@@ -564,6 +593,50 @@ function snapShift(points, targets, tolerance) {
 
 let lastTap = { id: null, at: 0 };
 
+/* -------------------------------------------------------- context menu */
+
+// Long press on a phone, right click on a desktop: same menu, so the gesture is not something that
+// only exists on one of the two.
+function openContextMenu(item, x, y) {
+  selectedItem = item.id;
+  lastTap = { id: null, at: 0 };   // a long press must not count as the first half of a double tap
+  render();
+  const menu = $('#context-menu');
+  menu.classList.remove('hidden');
+  menu.querySelector('[data-act="replace"]').hidden = itemKind(item) === 'text';
+  menu.querySelector('[data-act="fill"]').textContent = spanOf(item) > 1
+    ? `Riempi le ${spanOf(item)} slide occupate` : 'Riempi la slide';
+  // keep it inside the window
+  const box = menu.getBoundingClientRect();
+  menu.style.left = `${clamp(x, 8, innerWidth - box.width - 8)}px`;
+  menu.style.top = `${clamp(y, 8, innerHeight - box.height - 8)}px`;
+}
+
+const closeContextMenu = () => $('#context-menu').classList.add('hidden');
+
+function runContextAction(action) {
+  const item = selected();
+  closeContextMenu();
+  if (!item) return;
+  if (action === 'replace') { $('#item-replace').click(); return; }
+  pushUndo();
+  if (action === 'duplicate') {
+    const copy = { ...clone(item), id: uid(), x: item.x + 0.08, y: item.y + 0.04 };
+    project.items.push(copy);
+    selectedItem = copy.id;
+  }
+  if (action === 'front') project.items = [...project.items.filter(i => i !== item), item];
+  if (action === 'back') project.items = [item, ...project.items.filter(i => i !== item)];
+  if (action === 'fill') fillOccupiedSlides(item);
+  if (action === 'straighten') item.rotation = 0;
+  if (action === 'delete') {
+    project.items = project.items.filter(i => i !== item);
+    selectedItem = null;
+    toast('Elemento eliminato — annulla con ↶');
+  }
+  render();
+}
+
 function setupItemPointer(node, item, width) {
   node.addEventListener('pointerdown', event => {
     if (event.button !== 0 && event.pointerType === 'mouse') return;
@@ -582,6 +655,15 @@ function setupItemPointer(node, item, width) {
     }
     const downAt = { x: event.clientX, y: event.clientY };
 
+    // held still for half a second: show the menu instead of dragging
+    let longPress = setTimeout(() => {
+      longPress = null;
+      // releasing a capture that was never granted throws, and that would swallow the menu
+      try { node.releasePointerCapture(event.pointerId); } catch { /* nothing to release */ }
+      openContextMenu(item, downAt.x, downAt.y);
+    }, 500);
+    const cancelLongPress = () => { if (longPress) { clearTimeout(longPress); longPress = null; } };
+
     selectedItem = item.id;
     selectedSlide = clamp(Math.floor(item.x + item.w / 2), 0, project.slideCount - 1);
     $$('.item').forEach(n => n.classList.toggle('selected', n === node));
@@ -592,7 +674,7 @@ function setupItemPointer(node, item, width) {
     const dir = event.target.dataset.dir || null;
     const h = width * OUT_H / OUT_W;
     const start = { px: event.clientX, py: event.clientY, ...item };
-    node.setPointerCapture(event.pointerId);
+    try { node.setPointerCapture(event.pointerId); } catch { /* pointer already gone */ }
     node.classList.add('dragging');
 
     // rotation pivots on the item's centre, which the bounding box gives us even while rotated
@@ -614,6 +696,8 @@ function setupItemPointer(node, item, width) {
     let lastPointer = { x: event.clientX, y: event.clientY };
     const move = e => {
       lastPointer = { x: e.clientX, y: e.clientY };
+      if (Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y) > 6) cancelLongPress();
+      if (!longPress && $('#context-menu').classList.contains('hidden') === false) return;
       const dx = (e.clientX - start.px) / width;
       const dy = (e.clientY - start.py) / h;
       if (dir === 'rot') {
@@ -668,13 +752,15 @@ function setupItemPointer(node, item, width) {
       node.removeEventListener('pointermove', move);
       node.removeEventListener('pointerup', done);
       node.removeEventListener('pointercancel', done);
+      cancelLongPress();
       node.classList.remove('dragging');
       showGuide(guideV, null, 'x');
       showGuide(guideH, null, 'y');
       // only a tap that stayed put counts towards a double tap — dragging twice in a row must not
       // be read as "open the file picker"
       const moved = Math.hypot(lastPointer.x - downAt.x, lastPointer.y - downAt.y) > 5;
-      lastTap = moved ? { id: null, at: 0 } : { id: item.id, at: Date.now() };
+      const menuUp = !$('#context-menu').classList.contains('hidden');
+      lastTap = (moved || menuUp) ? { id: null, at: 0 } : { id: item.id, at: Date.now() };
       render();
     };
     node.addEventListener('pointermove', move);
@@ -1469,6 +1555,21 @@ function init() {
   $('#help-close').onclick = () => $('#help-dialog').close();
   $$('.tab').forEach(t => t.onclick = () => showPanel(t.dataset.panel));
 
+  $$('.tab-scope').forEach(tab => tab.onclick = () => setScope(tab.dataset.scope));
+  setScope('slide');
+
+  $$('#context-menu [data-act]').forEach(b => b.onclick = () => runContextAction(b.dataset.act));
+  document.addEventListener('pointerdown', e => {
+    if (!e.target.closest('#context-menu') && !e.target.closest('.item')) closeContextMenu();
+  }, true);
+  $('#strip').addEventListener('contextmenu', e => {
+    const node = e.target.closest('.item');
+    if (!node) return;
+    e.preventDefault();
+    const item = project.items.find(i => i.id === node.dataset.id);
+    if (item) openContextMenu(item, e.clientX, e.clientY);
+  });
+
   $('#undo').onclick = undo;
   $('#redo').onclick = redo;
   // a slider drag is one undo step: remember the state when the grab starts, not on every pixel
@@ -1487,7 +1588,10 @@ function init() {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); return; }
     if (typing) return;
     if ((e.key === 'Delete' || e.key === 'Backspace') && selectedItem) { e.preventDefault(); removeSelected(); }
-    if (e.key === 'Escape' && selectedItem) { selectedItem = null; render(); }
+    if (e.key === 'Escape') {
+      if (!$('#context-menu').classList.contains('hidden')) { closeContextMenu(); return; }
+      if (selectedItem) { selectedItem = null; render(); }
+    }
   });
   // drop photos straight onto the strip: they land on the slide you dropped them over
   const dropZone = $('#strip-scroll');
