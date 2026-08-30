@@ -202,7 +202,10 @@ function shapeCSS(item, scale) {
 }
 
 // three shapes of the same item: a photo, a solid block, or a piece of text
-const itemKind = item => (item.text !== undefined && item.text !== null ? 'text' : item.src ? 'image' : 'colour');
+const itemKind = item => (item.text !== undefined && item.text !== null ? 'text'
+  : item.src ? 'image'
+  : item.placeholder ? 'empty'
+  : 'colour');
 
 /* ------------------------------------------------------------- storage */
 
@@ -358,12 +361,13 @@ function buildStrip(host, width, interactive) {
 
   // array order is the stack: first drawn is furthest back
   project.items.forEach(item => {
+    // one object, four shapes: a photo, a solid colour block, text, or an empty frame
+    const kind = itemKind(item);
     const node = document.createElement('div');
-    node.className = `item frame-${item.frame} ${item.id === selectedItem && interactive ? 'selected' : ''} ${spanOf(item) > 1 ? 'spanning' : ''} ${item.demo ? 'demo' : ''}`;
+    node.className = `item frame-${item.frame} ${kind === 'empty' ? 'is-empty' : ''} ${item.id === selectedItem && interactive ? 'selected' : ''} ${spanOf(item) > 1 ? 'spanning' : ''} ${item.demo ? 'demo' : ''}`;
     node.dataset.id = item.id;
-    // one object, three shapes: a photo, a solid colour block, or text
-    const inside = itemKind(item) === 'text'
-      ? `<div class="item-text"></div>`
+    const inside = kind === 'text' ? '<div class="item-text"></div>'
+      : kind === 'empty' ? '<div class="item-empty">＋</div>'
       : (item.src ? `<img src="${item.src}" alt="">` : '');
     node.innerHTML = `<div class="item-box">${inside}<span class="tint"></span></div><span class="tape"></span><span class="outline"></span>`
       + (interactive && item.demo ? '<span class="demo-tag">esempio · tocca 2 volte</span>' : '')
@@ -399,7 +403,8 @@ function styleItem(node, item, width) {
   box.style.clipPath = shaped.clip;
   node.style.setProperty('--shape-clip', shaped.clip || 'none');
   const kind = itemKind(item);
-  box.style.background = kind === 'image' ? '#111'
+  box.style.background = kind === 'empty' ? 'transparent'
+    : kind === 'image' ? '#111'
     : kind === 'text' ? rgba(item.fill || '#000000', (item.fillOpacity ?? 0) / 100)
     : (item.fill || '#888888');
 
@@ -808,6 +813,12 @@ function setupItemPointer(node, item, width) {
 
     // Double tap on a photo opens the file picker: the quickest way to swap a template's demo
     // photo for your own. The picker needs a user gesture, and this pointerdown is one.
+    if (itemKind(item) === 'empty' && !event.target.dataset.dir) {
+      selectedItem = item.id;
+      renderInspector();
+      $('#item-replace').click();
+      return;
+    }
     const now = Date.now();
     if (lastTap.id === item.id && now - lastTap.at < 400) {
       lastTap = { id: null, at: 0 };
@@ -1016,21 +1027,37 @@ function planSketch(perSlide, extraSlides = 0, keptSlides = 0) {
 
 // What each choice would actually do with these photos, worked out up front so the dialog can show
 // both the sketch and the real numbers.
+// What each choice would actually do with these photos, worked out up front so the dialog can show
+// both the sketch and the real numbers. Only the choices that make sense here are offered.
 function planOptions(count) {
-  const frames = project.items.filter(i => i.demo && itemKind(i) === 'image').length;
+  const demoFrames = project.items.filter(i => i.demo && itemKind(i) === 'image');
+  const emptyFrames = project.items.filter(i => itemKind(i) === 'empty');
+  const photos = project.items.filter(i => itemKind(i) === 'image' && !i.demo);
+  const openFrames = demoFrames.length + emptyFrames.length;
   const slides = project.slideCount;
   const free = slidesWithRoom().length;
   const options = [];
 
-  if (frames) {
-    const filled = Math.min(frames, count);
+  const perSlideOf = list => Array.from({ length: slides }, (_, slide) =>
+    list.filter(i => firstSlideOf(i) === slide).length);
+
+  if (openFrames) {
+    const filled = Math.min(openFrames, count);
     options.push({
-      id: 'frames', title: 'Riempi i riquadri del template',
-      note: count >= frames
-        ? `${filled} riquadri riempiti${count > frames ? `, ${count - frames} foto avanzano` : ''}.`
-        : `${filled} riquadri riempiti, i ${frames - filled} vuoti vengono tolti.`,
-      sketch: planSketch(Array.from({ length: slides }, (_, slide) =>
-        Math.min(filled, project.items.filter(i => i.demo && itemKind(i) === 'image' && firstSlideOf(i) === slide).length)))
+      id: 'frames', title: `Riempi i ${openFrames} riquadri liberi`,
+      note: count >= openFrames
+        ? `Tutti riempiti${count > openFrames ? `, ${count - openFrames} foto avanzano` : ''}.`
+        : `${filled} riempiti, gli altri ${openFrames - filled} restano vuoti per dopo.`,
+      sketch: planSketch(perSlideOf([...demoFrames, ...emptyFrames]))
+    });
+  }
+
+  if (photos.length) {
+    const replaced = Math.min(photos.length, count);
+    options.push({
+      id: 'replace', title: `Sostituisci le ${photos.length} foto già presenti`,
+      note: `Layout, forme e cornici restano: cambiano solo le immagini${count < photos.length ? `. Le ultime ${photos.length - replaced} restano com’è` : ''}.`,
+      sketch: planSketch(perSlideOf(photos))
     });
   }
 
@@ -1045,8 +1072,8 @@ function planOptions(count) {
 
   const composed = spread(Math.min(count, slides * MAX_PER_SLIDE), slides);
   options.push({
-    id: 'compose', title: 'Componi più foto per slide',
-    note: `${composed.join(' + ')} foto sulle ${slides} slide, con disposizioni diverse.`,
+    id: 'compose', title: 'Ricomponi tutto da capo',
+    note: `${composed.join(' + ')} foto sulle ${slides} slide. Sostituisce quello che c’è ora.`,
     sketch: planSketch(composed)
   });
 
@@ -1113,24 +1140,37 @@ async function autoLayout(files) {
   let used = 0;
   emptiedFrames = 0;
 
+  if (plan === 'replace') {
+    // same layout, new pictures: walk the photos in reading order and swap the sources
+    project.items.filter(i => itemKind(i) === 'image' && !i.demo).sort(readingOrder).forEach(photo => {
+      if (used >= sources.length) return;
+      photo.src = sources[used++];
+    });
+  }
+
   if (plan === 'frames') {
-    const frames = project.items.filter(i => i.demo && itemKind(i) === 'image').sort(readingOrder);
+    const frames = project.items
+      .filter(i => (i.demo && itemKind(i) === 'image') || itemKind(i) === 'empty')
+      .sort(readingOrder);
     frames.forEach(frame => {
       if (used >= sources.length) return;
       frame.src = sources[used++];
       frame.demo = false;
+      frame.placeholder = false;
     });
-    // any frame still holding a demo picture would just look like a stray coloured rectangle:
-    // clear it out rather than leave a fake photograph in the album
-    const leftEmpty = project.items.filter(i => i.demo && itemKind(i) === 'image').length;
-    if (leftEmpty) {
-      project.items = project.items.filter(i => !(i.demo && itemKind(i) === 'image'));
-      emptiedFrames = leftEmpty;
-    }
+    // frames still holding a demo picture become empty slots: they keep their place in the layout,
+    // are obviously not photographs, and can be filled later or left out of the export
+    project.items.filter(i => i.demo && itemKind(i) === 'image').forEach(frame => {
+      frame.src = null;
+      frame.placeholder = true;
+      frame.demo = false;
+      emptiedFrames++;
+    });
   }
 
   const left = sources.slice(used);
-  if (left.length && plan !== 'frames') {
+  if (left.length && plan === 'compose') project.items = [];      // recomposing starts from a clean strip
+  if (left.length && plan !== 'frames' && plan !== 'replace') {
     const targets = plan === 'append' ? slidesWithRoom() : Array.from({ length: project.slideCount }, (_, i) => i);
     const perSlide = plan === 'one'
       ? targets.map(() => 1)
@@ -1849,6 +1889,7 @@ function drawItem(ctx, item, image, index) {
   if (iw <= 0 || ih <= 0) { ctx.restore(); return; }
   shapePath(ctx, item, ix, iy, iw, ih, Math.max(0, 3 - spec.border / Math.max(1, item.radius || 1)));
   ctx.clip();
+  if (itemKind(item) === 'empty') { ctx.restore(); return; }
   if (itemKind(item) === 'text') {
     if (item.fillOpacity) {
       ctx.fillStyle = rgba(item.fill || '#000000', item.fillOpacity / 100);
@@ -2216,7 +2257,7 @@ function init() {
   $('#item-delete').onclick = removeSelected;
   $('#item-replace').onchange = e => {
     const item = selected();
-    if (item) readFiles(e.target.files, src => { pushUndo(); item.src = src; item.demo = false; delete item.fill; render(); toast('Immagine inserita'); });
+    if (item) readFiles(e.target.files, src => { pushUndo(); item.src = src; item.demo = false; item.placeholder = false; delete item.fill; render(); toast('Immagine inserita'); });
     e.target.value = '';
   };
 
