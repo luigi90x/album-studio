@@ -32,10 +32,25 @@ elemento (immagine, riquadro di colore o testo) e l'ordine nella pila decide cos
 ## Comandi
 
 ```bash
+node avvia-locale.js   # apre l'app su http://localhost (spazio di archiviazione pieno)
 node build.js          # album-studio.html: un file solo, da copiare ovunque
 node build.js --web    # docs/: la versione pubblicata (bundle + manifest + service worker)
 node publish.js "cosa è cambiato"   # test, bump cache, build, commit e push
 ```
+
+Su Windows c'è anche `Avvia Album Studio.bat`: doppio clic, si apre il browser sull'app.
+
+### Perché non basta aprire il file
+
+Da `file://` Chrome non concede IndexedDB e l'app ripiega su `localStorage`: circa 5 MB in tutto,
+cioè poche foto. `localhost` è considerato sicuro quanto `https`, quindi lo stesso identico file
+servito da lì ottiene lo spazio pieno. Le tre modalità:
+
+| Come apri l'app | Archivio | Spazio |
+|---|---|---|
+| `avvia-locale.js` o il sito pubblicato | IndexedDB, foto come Blob deduplicati | quello del browser (GB) |
+| Doppio clic sull'HTML (`file://`) | localStorage, foto incorporate | ~5 MB |
+| Backup `.json` | file singolo con le foto in base64 | quanto vuoi, è un file |
 
 I test si lanciano anche singolarmente:
 
