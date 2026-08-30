@@ -17,9 +17,8 @@
         <button class="tab" data-panel="projects">Progetti</button>
       </nav>
       <div class="top-actions">
-        <button class="btn icon" id="undo" title="Annulla (Ctrl+Z)">↶</button>
-        <button class="btn icon" id="redo" title="Ripristina (Ctrl+Shift+Z)">↷</button>
         <button class="btn icon" id="help-open" title="Come funziona">?</button>
+        <button class="btn" id="save-template" title="Salva la composizione come template riutilizzabile, senza le foto">Template</button>
         <button class="btn" id="save-project" title="Salva il progetto su questo dispositivo">Salva</button>
         <button class="btn primary" id="export-open" title="Genera le slide pronte da pubblicare">Esporta</button>
       </div>
@@ -30,29 +29,42 @@
         <!-- ------------------------------------------------------- stage -->
         <section class="stage-wrap">
           <div class="add-bar">
-            <label class="add-btn" for="add-photo" title="Inserisce un'immagine libera, sopra le altre: spostala e ridimensionala come vuoi">
-              <input id="add-photo" type="file" accept="image/*" multiple hidden>
-              <span class="add-ico">◧</span> Aggiungi immagine
-            </label>
-            <label class="add-btn ghost" for="add-bg" title="Inserisce un'immagine che riempie la slide e sta dietro alle altre">
-              <input id="add-bg" type="file" accept="image/*" multiple hidden>
-              <span class="add-ico">▭</span> Immagine a tutta slide
-            </label>
-            <button class="add-btn ghost" id="add-color" title="Inserisce un riquadro a tinta unita che riempie la slide: per una slide di solo colore">
-              <span class="add-ico">■</span> Colore
-            </button>
-            <button class="add-btn ghost" id="add-text" title="Inserisce un testo: titolo, didascalia o etichetta">
-              <span class="add-ico">T</span> Testo
-            </button>
-            <div class="mode-switch" role="group" aria-label="Vista">
-              <button id="mode-edit" class="seg active" title="Composizione sulla striscia continua">Modifica</button>
-              <button id="mode-preview" class="seg" title="Come appare scorrendo il carosello">Anteprima</button>
+            <div class="tools">
+              <label class="tool" for="add-photo" title="Immagine libera, sopra le altre: spostala e ridimensionala come vuoi">
+                <input id="add-photo" type="file" accept="image/*" multiple hidden>
+                <span class="tool-ico">◧</span><span class="tool-name">Immagine</span>
+              </label>
+              <label class="tool" for="add-bg" title="Immagine che riempie la slide e sta dietro alle altre">
+                <input id="add-bg" type="file" accept="image/*" multiple hidden>
+                <span class="tool-ico">▭</span><span class="tool-name">Sfondo</span>
+              </label>
+              <button class="tool" id="add-color" title="Riquadro a tinta unita che riempie la slide">
+                <span class="tool-ico">■</span><span class="tool-name">Colore</span>
+              </button>
+              <button class="tool" id="add-text" title="Titolo, didascalia o etichetta">
+                <span class="tool-ico">T</span><span class="tool-name">Testo</span>
+              </button>
+              <button class="tool" id="auto-layout" title="Distribuisce sulle slide le immagini che scegli">
+                <span class="tool-ico">⁙</span><span class="tool-name">Più foto</span>
+                <input id="auto-files" type="file" accept="image/*" multiple hidden>
+              </button>
             </div>
-            <div class="zoomer">
-              <button id="zoom-out" title="Riduci">−</button>
-              <output id="zoom-value">100%</output>
-              <button id="zoom-in" title="Ingrandisci">+</button>
-              <button id="zoom-fit" title="Adatta allo schermo">Adatta</button>
+
+            <div class="bar-right">
+              <div class="mode-switch" role="group" aria-label="Vista">
+                <button id="mode-edit" class="seg active" title="Composizione sulla striscia continua">Modifica</button>
+                <button id="mode-preview" class="seg" title="Come appare scorrendo il carosello">Anteprima</button>
+              </div>
+              <div class="history">
+                <button id="undo" title="Annulla (Ctrl+Z)">↶</button>
+                <button id="redo" title="Ripristina (Ctrl+Shift+Z)">↷</button>
+              </div>
+              <div class="zoomer">
+                <button id="zoom-out" title="Riduci">−</button>
+                <output id="zoom-value">100%</output>
+                <button id="zoom-in" title="Ingrandisci">+</button>
+                <button id="zoom-fit" title="Adatta allo schermo">Adatta</button>
+              </div>
             </div>
           </div>
           <div id="stage" class="stage">
@@ -148,6 +160,23 @@
               <input id="item-panx" type="range" min="0" max="100" value="50">
               <label class="range-label">Sposta verticale <output id="item-pany-value">50</output></label>
               <input id="item-pany" type="range" min="0" max="100" value="50">
+
+              <h4 id="look-head">Resa fotografica</h4>
+              <div class="field"><span>Effetto</span>
+                <select id="item-look" title="Applicato anche nell'export, identico a quello che vedi">
+                  <option value="none">Naturale</option>
+                  <option value="bw">Bianco e nero</option>
+                  <option value="warm">Caldo</option>
+                  <option value="cold">Freddo</option>
+                  <option value="faded">Sbiadito</option>
+                  <option value="film">Pellicola</option>
+                  <option value="punch">Deciso</option>
+                </select>
+              </div>
+              <label class="range-label">Grana <output id="item-grain-value">0</output></label>
+              <input id="item-grain" type="range" min="0" max="100" value="0" title="Rumore di pellicola">
+              <label class="range-label">Vignettatura <output id="item-vignette-value">0</output></label>
+              <input id="item-vignette" type="range" min="0" max="80" value="0" title="Scurisce i bordi dell'immagine">
 
               <h4>Stile</h4>
               <div class="field"><span>Cornice</span>
@@ -258,7 +287,12 @@
     </section>
 
     <section id="layouts-panel" class="panel">
-      <div class="page-intro"><h2>Template</h2><p>Ogni scheda mostra la prima slide e, sotto, l'intero carosello: così vedi subito quali foto attraversano più slide.</p></div>
+      <div class="page-intro"><h2>Template</h2><p>Ogni scheda mostra la prima slide e, sotto, l'intero carosello: così vedi subito quali foto attraversano più slide. Applicane uno e poi riempilo con “Più foto”.</p></div>
+      <section id="my-templates" class="hidden">
+        <h3 class="section-title">I tuoi template</h3>
+        <div id="my-template-grid" class="layout-grid"></div>
+        <h3 class="section-title">Template inclusi</h3>
+      </section>
       <div id="layout-grid" class="layout-grid"></div>
     </section>
 
@@ -316,6 +350,7 @@
     <div id="export-grid" class="export-grid"></div>
     <button id="share-pngs" class="btn primary wide hidden">Condividi / salva nelle foto</button>
     <button id="download-pngs" class="btn wide">Scarica tutte le slide</button>
+    <button id="download-panorama" class="btn wide" title="Un'unica immagine con tutte le slide affiancate: serve per controllare che i passaggi siano continui">Scarica la striscia intera (una immagine)</button>
     <button id="download-project" class="btn wide">Scarica backup del progetto</button>
     <button id="close-export" class="btn wide ghost">Chiudi</button>
   </dialog>

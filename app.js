@@ -30,6 +30,7 @@ const newItem = (src, over) => ({
   zoom: 100, panX: 50, panY: 50,
   rotation: 0, radius: 12, frame: 'clean',
   tintColor: '#000000', tintOpacity: 0,
+  look: 'none', grain: 0, vignette: 0,
   ...over
 });
 const newProject = () => ({
@@ -136,6 +137,18 @@ const FONTS = {
   narrow:  { label: 'Stretto', stack: "'Arial Narrow', 'Segoe UI', Arial, sans-serif" },
   script:  { label: 'Corsivo', stack: "'Segoe Script', 'Brush Script MT', cursive" },
   mono:    { label: 'Mono',    stack: "'Courier New', ui-monospace, monospace" }
+};
+
+// Photo looks, written as CSS filter strings: canvas accepts the very same syntax through
+// ctx.filter, so screen and export cannot drift apart.
+const LOOKS = {
+  none:   { label: 'Naturale', css: '' },
+  bw:     { label: 'Bianco e nero', css: 'grayscale(1) contrast(1.08)' },
+  warm:   { label: 'Caldo', css: 'saturate(1.15) sepia(.28) contrast(1.04)' },
+  cold:   { label: 'Freddo', css: 'saturate(1.1) hue-rotate(-12deg) brightness(1.03)' },
+  faded:  { label: 'Sbiadito', css: 'saturate(.72) contrast(.9) brightness(1.08)' },
+  film:   { label: 'Pellicola', css: 'saturate(.9) contrast(1.18) sepia(.12)' },
+  punch:  { label: 'Deciso', css: 'saturate(1.35) contrast(1.15)' }
 };
 
 // three shapes of the same item: a photo, a solid block, or a piece of text
@@ -350,10 +363,20 @@ function styleItem(node, item, width) {
     img.style.objectPosition = `${item.panX}% ${item.panY}%`;
     img.style.transform = `scale(${item.zoom / 100})`;
     img.style.transformOrigin = `${item.panX}% ${item.panY}%`;
-    img.style.filter = spec.filter;
+    img.style.filter = [spec.filter, (LOOKS[item.look] || LOOKS.none).css].filter(Boolean).join(' ');
   }
   const tint = $('.tint', node);
-  if (tint) tint.style.background = item.tintOpacity ? rgba(item.tintColor, item.tintOpacity / 100) : 'transparent';
+  if (tint) {
+    const layers = [];
+    if (item.tintOpacity) layers.push(`linear-gradient(${rgba(item.tintColor, item.tintOpacity / 100)}, ${rgba(item.tintColor, item.tintOpacity / 100)})`);
+    if (item.vignette) layers.push(`radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,${item.vignette / 100}) 100%)`);
+    tint.style.background = layers.join(', ') || 'transparent';
+    tint.style.opacity = '1';
+    // grain is a tiled noise tile, cheap and resolution independent
+    tint.style.backgroundImage = layers.length ? tint.style.backgroundImage : '';
+    node.classList.toggle('grainy', Boolean(item.grain));
+    node.style.setProperty('--grain', (item.grain || 0) / 100);
+  }
 }
 
 function renderStrip() {
@@ -401,6 +424,19 @@ function renderRuler() {
     inner.style.left = `${-index * thumbW}px`;
     button.append(inner, Object.assign(document.createElement('span'), { className: 'rul-num', textContent: pad(index) }));
     button.onclick = () => { selectedSlide = index; selectedItem = null; render(); scrollSlideIntoView(index); };
+    // drag a thumbnail onto another to reorder the carousel
+    button.draggable = true;
+    button.ondragstart = event => { event.dataTransfer.setData('text/slide', String(index)); button.classList.add('dragging'); };
+    button.ondragend = () => button.classList.remove('dragging');
+    button.ondragover = event => { event.preventDefault(); button.classList.add('drop-target'); };
+    button.ondragleave = () => button.classList.remove('drop-target');
+    button.ondrop = event => {
+      event.preventDefault();
+      button.classList.remove('drop-target');
+      const from = Number(event.dataTransfer.getData('text/slide'));
+      if (Number.isNaN(from) || from === index) return;
+      moveSlideTo(from, index);
+    };
     ruler.append(button);
     buildStrip(inner, thumbW, false);
   });
@@ -436,6 +472,21 @@ function renderLayers() {
     </div>`;
   }).join('');
   $$('[data-pick]', list).forEach(b => b.onclick = () => { selectedItem = b.dataset.pick; render(); });
+  // dragging a row changes what covers what: the list reads top-first, the array is bottom-first
+  $$('.layer-row', list).forEach((row, position) => {
+    row.draggable = true;
+    row.ondragstart = event => { event.dataTransfer.setData('text/layer', String(position)); row.classList.add('dragging'); };
+    row.ondragend = () => row.classList.remove('dragging');
+    row.ondragover = event => { event.preventDefault(); row.classList.add('drop-target'); };
+    row.ondragleave = () => row.classList.remove('drop-target');
+    row.ondrop = event => {
+      event.preventDefault();
+      row.classList.remove('drop-target');
+      const from = Number(event.dataTransfer.getData('text/layer'));
+      if (Number.isNaN(from) || from === position) return;
+      restackTouching(from, position);
+    };
+  });
   $$('[data-drop]', list).forEach(b => b.onclick = event => {
     event.stopPropagation();
     pushUndo();
@@ -445,6 +496,24 @@ function renderLayers() {
     toast('Elemento eliminato — annulla con ↶');
   });
   if (hadFocus) $(`[data-pick="${hadFocus}"]`, list)?.focus();   // keyboard focus survives the rebuild
+}
+
+// Moves one element of the current slide to another depth. Positions are what the list shows
+// (top first), so they are flipped back onto the array, where the first entry is the furthest back.
+function restackTouching(fromPosition, toPosition) {
+  const touching = project.items.filter(i => i.x < selectedSlide + 1 && i.x + i.w > selectedSlide);
+  const shown = [...touching].reverse();
+  const moving = shown[fromPosition];
+  const target = shown[toPosition];
+  if (!moving || !target) return;
+  pushUndo();
+  const rest = project.items.filter(i => i !== moving);
+  const targetIndex = rest.indexOf(target);
+  // dropping onto a row that is higher in the list means going above that element
+  rest.splice(fromPosition > toPosition ? targetIndex + 1 : targetIndex, 0, moving);
+  project.items = rest;
+  selectedItem = moving.id;
+  render();
 }
 
 function renderInspector() {
@@ -482,10 +551,12 @@ function renderInspector() {
   if (kind === 'colour') $('#item-fill-color').value = item.fill || '#888888';
   $('#text-controls').classList.toggle('hidden', kind !== 'text');
   $('#item-replace').parentElement.classList.toggle('hidden', kind === 'text');
-  ['#framing-head', '#item-zoom', '#item-panx', '#item-pany'].forEach(sel => $(sel).classList.toggle('hidden', !isPhoto));
+  ['#framing-head', '#item-zoom', '#item-panx', '#item-pany', '#look-head', '#item-grain', '#item-vignette']
+    .forEach(sel => $(sel).classList.toggle('hidden', !isPhoto));
+  $('#item-look').parentElement.classList.toggle('hidden', !isPhoto);
   $$('#sec-item .range-label').forEach(label => {
     const target = label.nextElementSibling;
-    if (target && ['item-zoom', 'item-panx', 'item-pany'].includes(target.id)) label.classList.toggle('hidden', !isPhoto);
+    if (target && ['item-zoom', 'item-panx', 'item-pany', 'item-grain', 'item-vignette'].includes(target.id)) label.classList.toggle('hidden', !isPhoto);
   });
   $('#replace-label').textContent = kind === 'colour' ? '↑ Metti un\'immagine al posto del colore' : '↑ Usa una mia immagine qui';
   if (kind === 'text') {
@@ -503,6 +574,11 @@ function renderInspector() {
     $$('[data-style]').forEach(b => b.classList.toggle('active', Boolean(item[b.dataset.style])));
   }
   $('#item-frame').value = item.frame;
+  $('#item-look').value = item.look || 'none';
+  $('#item-grain').value = item.grain || 0;
+  $('#item-grain-value').value = item.grain || 0;
+  $('#item-vignette').value = item.vignette || 0;
+  $('#item-vignette-value').value = item.vignette || 0;
   $('#item-tint-color').value = item.tintColor;
   $('#item-tint').value = item.tintOpacity;
   $('#item-tint-value').value = item.tintOpacity;
@@ -788,6 +864,79 @@ function addItem(src, how = 'free') {
 
 // A slide that is just a colour: same item, with a fill instead of a photo. Goes to the bottom of
 // the stack and covers the slide, which is what "sfondo a tinta unita" means in practice.
+// "Più foto" reads the situation instead of always doing the same thing:
+//   1. there are empty template frames  -> fill them, in reading order
+//   2. the strip is empty               -> compose a carousel sized on how many photos there are
+//   3. there is already work of yours   -> append the photos as new full-slide slides
+// Photos left over after filling frames become new slides, up to the maximum.
+const readingOrder = (a, b) => (firstSlideOf(a) - firstSlideOf(b)) || (a.y - b.y) || (a.x - b.x);
+
+// how many photos per slide reads well for a given batch
+function shapeFor(count) {
+  if (count <= 5) return 1;
+  if (count <= 10) return 2;
+  if (count <= 15) return 3;
+  return 4;
+}
+const RECIPE_FOR = { 1: null, 2: 'duo', 3: 'triptych', 4: 'contact' };
+
+async function autoLayout(files) {
+  const list = [...files].filter(f => f.type.startsWith('image/'));
+  if (!list.length) { toast('Scegli delle immagini'); return; }
+
+  const sources = [];
+  for (const file of list) {
+    try { sources.push(await importImage(file)); }
+    catch { toast(`Non riesco a leggere ${file.name}`); }
+  }
+  if (!sources.length) return;
+
+  pushUndo();
+  const frames = project.items.filter(i => i.demo && itemKind(i) === 'image').sort(readingOrder);
+  let used = 0;
+
+  if (frames.length) {
+    // 1. fill what the template already laid out
+    frames.forEach(frame => {
+      if (used >= sources.length) return;
+      frame.src = sources[used++];
+      frame.demo = false;
+    });
+  } else if (!project.items.length) {
+    // 2. nothing on the strip: build the carousel around the batch
+    const perSlide = shapeFor(sources.length);
+    const slides = Math.min(MAX_SLIDES, Math.ceil(sources.length / perSlide));
+    project.slideCount = slides;
+    for (let slide = 0; slide < slides && used < sources.length; slide++) {
+      const recipe = RECIPE_FOR[perSlide];
+      const spots = recipe ? RECIPES[recipe] : [[0, 0, 1, 1, 0]];
+      spots.forEach(([x, y, w, h, radius]) => {
+        if (used >= sources.length) return;
+        project.items.push(newItem(sources[used++], recipe
+          ? { x: slide + x, y, w, h, radius, frame: 'clean', rotation: 0 }
+          : { x: slide, y: 0, w: 1, h: 1, frame: 'none', radius: 0 }));
+      });
+    }
+  }
+
+  // 3. whatever is left becomes a new full-slide image at the end
+  while (used < sources.length && project.slideCount < MAX_SLIDES) {
+    const slide = project.slideCount++;
+    project.items.unshift(newItem(sources[used++], { x: slide, y: 0, w: 1, h: 1, frame: 'none', radius: 0 }));
+  }
+
+  selectedItem = null;
+  selectedSlide = 0;
+  render();
+  fitZoom();
+  const leftOver = sources.length - used;
+  toast(leftOver
+    ? `${used} foto sistemate — ${leftOver} non entrano nel massimo di ${MAX_SLIDES} slide`
+    : frames.length
+      ? `${used} foto inserite nei riquadri del template`
+      : `${used} foto disposte su ${project.slideCount} slide`);
+}
+
 function addTextItem() {
   pushUndo();
   const item = newItem(null, {
@@ -883,13 +1032,23 @@ function deleteSlide() {
 }
 
 function moveSlide(delta) {
-  const from = selectedSlide, to = from + delta;
-  if (to < 0 || to >= project.slideCount) return;
+  moveSlideTo(selectedSlide, selectedSlide + delta);
+}
+
+// Reordering by drag can jump several places at once: shifting one step at a time keeps every
+// item's relationship with the slides it sits on.
+function moveSlideTo(from, to) {
+  if (to < 0 || to >= project.slideCount || from === to) return;
   pushUndo();
-  project.items = remapAfterMove(project.items, from, to);
+  const step = to > from ? 1 : -1;
+  for (let at = from; at !== to; at += step) {
+    project.items = remapAfterMove(project.items, at, at + step);
+  }
   selectedSlide = to;
+  selectedItem = null;
   render();
   scrollSlideIntoView(to);
+  toast(`Slide spostata in posizione ${pad(to)}`);
 }
 
 function duplicateSlide() {
@@ -1013,7 +1172,81 @@ const spanCount = (item, count) => {
   return Math.max(1, last - first + 1);
 };
 
+/* --------------------------------------------------- templates propri */
+
+const MY_TEMPLATES = 'album-studio-templates';
+
+const readMyTemplates = () => { try { return JSON.parse(localStorage.getItem(MY_TEMPLATES) || '[]'); } catch { return []; } };
+
+// A template is the composition without the photographs: geometry, style and frames are kept, the
+// images are dropped. That keeps it small enough for localStorage and makes it reusable on any set
+// of photos — reopening it gives you empty frames to fill with "Più foto".
+function saveAsTemplate() {
+  if (!project.items.length) { toast('Non c’è niente da salvare come template'); return; }
+  const name = (project.title || 'Il mio template').slice(0, 40);
+  const scene = demoScene('sunset');
+  const template = {
+    id: uid(),
+    name,
+    slides: project.slideCount,
+    format: project.format,
+    color: project.bgColor,
+    items: project.items.map(i => ({
+      ...i,
+      id: undefined,
+      src: itemKind(i) === 'image' ? scene : i.src,
+      demo: itemKind(i) === 'image' || undefined
+    }))
+  };
+  try {
+    const mine = readMyTemplates().filter(t => t.name !== name);
+    mine.unshift(template);
+    localStorage.setItem(MY_TEMPLATES, JSON.stringify(mine.slice(0, 24)));
+    toast(`Salvato come template “${name}” — lo trovi in Template`);
+  } catch {
+    toast('Spazio esaurito: non riesco a salvare il template');
+  }
+}
+
+function myTemplateCard(template) {
+  const items = template.items.map(i => ({ ...newItem(i.src), ...i }));
+  const photos = items.filter(i => itemKind(i) === 'image').length;
+  const minis = Array.from({ length: template.slides }, (_, k) => `<div class="mini" style="background:${template.color}">${stripHTML(items, template.slides, k)}</div>`).join('');
+  return `<article class="layout-card">
+    <div class="layout-art" style="background:${template.color}">${stripHTML(items, template.slides, 0)}</div>
+    <div class="layout-strip">${minis}</div>
+    <div class="layout-meta"><span class="chip">${template.slides} slide</span><span class="chip">${photos} riquadri</span><span class="chip">${template.format}</span></div>
+    <footer><div><h3>${template.name}</h3><small>Il tuo template</small></div>
+      <span class="card-actions">
+        <button class="btn" data-mine="${template.id}">Usa</button>
+        <button class="btn danger" data-mine-del="${template.id}" title="Elimina questo template">×</button>
+      </span></footer>
+  </article>`;
+}
+
+function applyMyTemplate(template) {
+  pushUndo();
+  project.slideCount = template.slides;
+  applyFormat(template.format);
+  project.bgColor = template.color;
+  project.items = template.items.map(i => ({ ...newItem(i.src), ...i, id: uid() }));
+  selectedSlide = 0;
+  selectedItem = null;
+  showPanel('editor');
+  fitZoom();
+  toast(`“${template.name}” applicato — usa “Più foto” per riempirlo`);
+}
+
 function renderLayoutGallery() {
+  const mine = readMyTemplates();
+  $('#my-templates').classList.toggle('hidden', !mine.length);
+  $('#my-template-grid').innerHTML = mine.map(myTemplateCard).join('');
+  $$('[data-mine]').forEach(button => button.onclick = () => applyMyTemplate(mine.find(t => t.id === button.dataset.mine)));
+  $$('[data-mine-del]').forEach(button => button.onclick = () => confirmAction('Eliminare il template?', 'Sparisce solo il template, i progetti restano.', 'Elimina', () => {
+    localStorage.setItem(MY_TEMPLATES, JSON.stringify(readMyTemplates().filter(t => t.id !== button.dataset.mineDel)));
+    renderLayoutGallery();
+    toast('Template eliminato');
+  }));
   $('#layout-grid').innerHTML = TEMPLATES.map(templateCard).join('');
   $$('[data-template]').forEach(button => button.onclick = () => {
     const template = TEMPLATES.find(t => t.id === button.dataset.template);
@@ -1247,6 +1480,30 @@ function drawText(ctx, item, x, y, w, h) {
   });
 }
 
+
+let grainTile = null;
+function drawGrain(ctx, x, y, w, h, strength) {
+  if (!grainTile) {
+    grainTile = document.createElement('canvas');
+    grainTile.width = grainTile.height = 128;
+    const tileCtx = grainTile.getContext('2d');
+    const data = tileCtx.createImageData(128, 128);
+    for (let i = 0; i < data.data.length; i += 4) {
+      const value = 110 + Math.random() * 90;
+      data.data[i] = data.data[i + 1] = data.data[i + 2] = value;
+      data.data[i + 3] = 255;
+    }
+    tileCtx.putImageData(data, 0, 0);
+  }
+  ctx.save();
+  ctx.globalAlpha = strength * 0.55;
+  ctx.globalCompositeOperation = 'overlay';
+  const pattern = ctx.createPattern(grainTile, 'repeat');
+  ctx.fillStyle = pattern;
+  ctx.fillRect(x, y, w, h);
+  ctx.restore();
+}
+
 // Draws one item for slide `index`: box coordinates are global, shifted by the slide offset, so an
 // item crossing the seam lines up exactly between two exported files.
 function drawItem(ctx, item, image, index) {
@@ -1288,7 +1545,19 @@ function drawItem(ctx, item, image, index) {
     // object-fit: cover with object-position panX/panY, then the zoom scale
     const scale = Math.max(iw / image.naturalWidth, ih / image.naturalHeight) * (item.zoom / 100);
     const dw = image.naturalWidth * scale, dh = image.naturalHeight * scale;
+    const look = [spec.filter, (LOOKS[item.look] || LOOKS.none).css].filter(Boolean).join(' ');
+    if (look) ctx.filter = look;
     ctx.drawImage(image, ix - (dw - iw) * (item.panX / 100), iy - (dh - ih) * (item.panY / 100), dw, dh);
+    ctx.filter = 'none';
+    if (item.grain) drawGrain(ctx, ix, iy, iw, ih, item.grain / 100);
+    if (item.vignette) {
+      const gradient = ctx.createRadialGradient(ix + iw / 2, iy + ih / 2, Math.min(iw, ih) * 0.22,
+        ix + iw / 2, iy + ih / 2, Math.max(iw, ih) * 0.72);
+      gradient.addColorStop(0, 'rgba(0,0,0,0)');
+      gradient.addColorStop(1, `rgba(0,0,0,${item.vignette / 100})`);
+      ctx.fillStyle = gradient;
+      ctx.fillRect(ix, iy, iw, ih);
+    }
   }
   if (item.tintOpacity) {
     ctx.fillStyle = rgba(item.tintColor, item.tintOpacity / 100);
@@ -1365,6 +1634,49 @@ async function prepareExport() {
 }
 
 // Sequential downloads: the browser may still ask permission for the batch.
+// The whole strip as a single wide image. Same drawing code: every item is placed against slide 0
+// of a canvas as wide as the carousel, so the seams land exactly where the slices would cut.
+async function exportPanorama() {
+  const button = $('#download-panorama');
+  button.disabled = true;
+  const wasLabel = button.textContent;
+  button.textContent = 'Preparo…';
+  try {
+    const sources = [...new Set(project.items.map(i => i.src).filter(Boolean))];
+    const imageMap = new Map(await Promise.all(sources.map(async src => [src, await loadImage(src)])));
+    const canvas = document.createElement('canvas');
+    canvas.width = OUT_W * project.slideCount;
+    canvas.height = OUT_H;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = project.bgColor;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    project.items.forEach(item => drawItem(ctx, item, imageMap.get(item.src), 0));
+    if (showGuides) {           // thin marks where each slide ends
+      ctx.strokeStyle = 'rgba(255,255,255,.45)';
+      ctx.setLineDash([14, 14]);
+      for (let i = 1; i < project.slideCount; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * OUT_W, 0);
+        ctx.lineTo(i * OUT_W, OUT_H);
+        ctx.stroke();
+      }
+    }
+    const blob = await canvasBlob(canvas);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${(project.title || 'album').toLowerCase().replace(/\s+/g, '-')}-panorama.png`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+    toast(`Panoramica ${canvas.width}×${canvas.height} scaricata`);
+  } catch {
+    toast('Non sono riuscito a comporre la panoramica');
+  } finally {
+    button.disabled = false;
+    button.textContent = wasLabel;
+  }
+}
+
 async function downloadPNGs() {
   if (!exported.length) return;
   for (const item of exported) {
@@ -1432,6 +1744,8 @@ function init() {
   $('#add-bg').onchange = e => { readFiles(e.target.files, src => addItem(src, 'full')); e.target.value = ''; };
   $('#add-photo').onchange = e => { readFiles(e.target.files, src => addItem(src, 'free')); e.target.value = ''; };
   $('#add-color').onclick = addColourBlock;
+  $('#auto-layout').onclick = () => $('#auto-files').click();
+  $('#auto-files').onchange = e => { autoLayout(e.target.files); e.target.value = ''; };
   $('#add-text').onclick = addTextItem;
 
   $('#item-text').oninput = e => { const i = selected(); if (i) { i.text = e.target.value; render(); } };
@@ -1510,6 +1824,9 @@ function init() {
   bindRange('#item-radius', 'radius');
   bindRange('#item-rotation', 'rotation', v => `${v}°`);
   $('#item-frame').onchange = () => { const i = selected(); if (i) { i.frame = $('#item-frame').value; render(); } };
+  $('#item-look').onchange = () => { const i = selected(); if (i) { pushUndo(); i.look = $('#item-look').value; render(); } };
+  bindRange('#item-grain', 'grain');
+  bindRange('#item-vignette', 'vignette');
   $('#item-fill').onclick = () => { const i = selected(); if (i) { pushUndo(); fillOccupiedSlides(i); render(); toast('Foto allineata ai bordi delle slide'); } };
   $('#item-widen').onclick = () => { const i = selected(); if (i) { pushUndo(); i.w = Math.min(i.w + 1, project.slideCount - i.x); render(); } };
   $('#item-narrow').onclick = () => { const i = selected(); if (i) { pushUndo(); i.w = Math.max(MIN_W, i.w - 1); render(); } };
@@ -1545,10 +1862,12 @@ function init() {
   $('#zoom-fit').onclick = fitZoom;
 
   $('#save-project').onclick = saveProject;
+  $('#save-template').onclick = saveAsTemplate;
   $('#export-open').onclick = () => { $('#export-dialog').showModal(); prepareExport(); };
   $('#close-export').onclick = () => $('#export-dialog').close();
   $('#export-dialog').addEventListener('close', clearExports);
   $('#download-pngs').onclick = downloadPNGs;
+  $('#download-panorama').onclick = exportPanorama;
   $('#download-project').onclick = downloadProject;
   $('#open-backup').onchange = e => { if (e.target.files[0]) openBackup(e.target.files[0]); e.target.value = ''; };
   $('#help-open').onclick = () => $('#help-dialog').showModal();
