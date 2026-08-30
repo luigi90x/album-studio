@@ -341,7 +341,9 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
   .top-actions{margin-left:auto}
   /* phone: the strip stays pinned at the top, the panels scroll underneath it */
   .workspace{display:flex;flex-direction:column;grid-template-areas:none;overflow-y:auto;-webkit-overflow-scrolling:touch}
-  .stage-wrap{position:sticky;top:0;z-index:5;flex:0 0 auto;height:50vh;border-bottom:1px solid var(--line)}
+  /* the workspace gets a height of its own: as one block it was squeezed by the toolbar and ruler */
+  .stage-wrap{position:sticky;top:0;z-index:5;flex:0 0 auto;height:auto;border-bottom:1px solid var(--line)}
+  .stage{flex:0 0 42vh;min-height:230px}
   .col{max-height:none;overflow:visible;border:0!important;border-top:1px solid var(--line)!important}
   .col-left,.col-right{width:100%}
   .stage-wrap{order:0}
@@ -719,7 +721,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
         <h2>I miei progetti</h2>
         <p>Salvati sul dispositivo, senza account.</p>
         <p class="warn" id="storage-note"></p>
-        <label class="btn center" for="open-backup" style="max-width:260px;margin-top:12px" title="Riapri un progetto scaricato come file JSON"><input id="open-backup" type="file" accept="application/json,.json" hidden> Apri un backup JSON</label>
+        <label class="btn center" for="open-backup" style="max-width:260px;margin-top:12px" title="Riapri un progetto scaricato come file"><input id="open-backup" type="file" accept="application/json,.json" hidden> Apri un backup</label>
       </div>
       <div id="projects-grid" class="projects-grid"></div>
     </section>
@@ -2996,13 +2998,30 @@ function showPanel(name) {
   if (name === 'editor') render();
 }
 
-function fitZoom() {
+// The zoom follows the window until you set it yourself: on load, on resize, when the phone is
+// turned, when a panel opens. Measuring at startup alone was not enough — the stage has no real
+// height yet at that point, so the strip came up at the minimum size.
+let autoZoom = true;
+
+function fitZoom({ auto = false } = {}) {
   const stage = $('#stage');
-  // keep ~2.5 slides in view so the seams are always visible, but never taller than the stage
-  const byWidth = (stage.clientWidth - 44) / Math.min(project.slideCount, 2.5);
-  const byHeight = (stage.clientHeight - 56) * OUT_W / OUT_H;
-  slideW = clamp(Math.min(byWidth, byHeight), 110, 620);
+  const available = { w: stage.clientWidth, h: stage.clientHeight };
+  if (!available.w || !available.h) return;        // layout not settled yet: a later measure will do it
+  if (auto && !autoZoom) return;                   // you chose a zoom: leave it alone
+  // Fill the height first — that is what makes the strip readable — but never so much that the
+  // seam with the next slide falls out of view: keep at least 1.8 slides across.
+  const byHeight = (available.h - 56) * OUT_W / OUT_H;
+  const byWidth = (available.w - 44) / Math.min(project.slideCount, 1.8);
+  const next = clamp(Math.min(byHeight, byWidth), 110, 620);
+  if (Math.abs(next - slideW) < 0.5) return;       // nothing to redraw
+  slideW = next;
   render();
+}
+
+function watchStageSize() {
+  const stage = $('#stage');
+  if (typeof ResizeObserver === 'undefined') return;
+  new ResizeObserver(() => fitZoom({ auto: true })).observe(stage);
 }
 
 function bindRange(id, key, format) {
@@ -3163,9 +3182,9 @@ function init() {
   };
   $('#mode-edit').onclick = () => setMode('edit');
   $('#mode-preview').onclick = () => setMode('preview');
-  $('#zoom-in').onclick = () => { slideW = clamp(slideW * 1.15, 110, 620); render(); };
-  $('#zoom-out').onclick = () => { slideW = clamp(slideW / 1.15, 110, 620); render(); };
-  $('#zoom-fit').onclick = fitZoom;
+  $('#zoom-in').onclick = () => { autoZoom = false; slideW = clamp(slideW * 1.15, 110, 620); render(); };
+  $('#zoom-out').onclick = () => { autoZoom = false; slideW = clamp(slideW / 1.15, 110, 620); render(); };
+  $('#zoom-fit').onclick = () => { autoZoom = true; fitZoom(); };
 
   $('#save-project').onclick = saveProject;
   $('#save-template').onclick = saveAsTemplate;
@@ -3235,9 +3254,10 @@ function init() {
     readFiles(files, src => addItem(src, 'free'));
   });
 
-  window.addEventListener('resize', () => render());
+  window.addEventListener('resize', () => fitZoom({ auto: true }));
 
   applyFormat(project.format);
+  watchStageSize();
   fitZoom();
   migrateLegacyStorage().then(restoreAutosave);
 }

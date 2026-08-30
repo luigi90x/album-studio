@@ -2163,13 +2163,30 @@ function showPanel(name) {
   if (name === 'editor') render();
 }
 
-function fitZoom() {
+// The zoom follows the window until you set it yourself: on load, on resize, when the phone is
+// turned, when a panel opens. Measuring at startup alone was not enough — the stage has no real
+// height yet at that point, so the strip came up at the minimum size.
+let autoZoom = true;
+
+function fitZoom({ auto = false } = {}) {
   const stage = $('#stage');
-  // keep ~2.5 slides in view so the seams are always visible, but never taller than the stage
-  const byWidth = (stage.clientWidth - 44) / Math.min(project.slideCount, 2.5);
-  const byHeight = (stage.clientHeight - 56) * OUT_W / OUT_H;
-  slideW = clamp(Math.min(byWidth, byHeight), 110, 620);
+  const available = { w: stage.clientWidth, h: stage.clientHeight };
+  if (!available.w || !available.h) return;        // layout not settled yet: a later measure will do it
+  if (auto && !autoZoom) return;                   // you chose a zoom: leave it alone
+  // Fill the height first — that is what makes the strip readable — but never so much that the
+  // seam with the next slide falls out of view: keep at least 1.8 slides across.
+  const byHeight = (available.h - 56) * OUT_W / OUT_H;
+  const byWidth = (available.w - 44) / Math.min(project.slideCount, 1.8);
+  const next = clamp(Math.min(byHeight, byWidth), 110, 620);
+  if (Math.abs(next - slideW) < 0.5) return;       // nothing to redraw
+  slideW = next;
   render();
+}
+
+function watchStageSize() {
+  const stage = $('#stage');
+  if (typeof ResizeObserver === 'undefined') return;
+  new ResizeObserver(() => fitZoom({ auto: true })).observe(stage);
 }
 
 function bindRange(id, key, format) {
@@ -2330,9 +2347,9 @@ function init() {
   };
   $('#mode-edit').onclick = () => setMode('edit');
   $('#mode-preview').onclick = () => setMode('preview');
-  $('#zoom-in').onclick = () => { slideW = clamp(slideW * 1.15, 110, 620); render(); };
-  $('#zoom-out').onclick = () => { slideW = clamp(slideW / 1.15, 110, 620); render(); };
-  $('#zoom-fit').onclick = fitZoom;
+  $('#zoom-in').onclick = () => { autoZoom = false; slideW = clamp(slideW * 1.15, 110, 620); render(); };
+  $('#zoom-out').onclick = () => { autoZoom = false; slideW = clamp(slideW / 1.15, 110, 620); render(); };
+  $('#zoom-fit').onclick = () => { autoZoom = true; fitZoom(); };
 
   $('#save-project').onclick = saveProject;
   $('#save-template').onclick = saveAsTemplate;
@@ -2402,9 +2419,10 @@ function init() {
     readFiles(files, src => addItem(src, 'free'));
   });
 
-  window.addEventListener('resize', () => render());
+  window.addEventListener('resize', () => fitZoom({ auto: true }));
 
   applyFormat(project.format);
+  watchStageSize();
   fitZoom();
   migrateLegacyStorage().then(restoreAutosave);
 }
