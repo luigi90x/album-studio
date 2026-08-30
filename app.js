@@ -985,26 +985,79 @@ function composeSlide(slideIndex, sources, style, avoid) {
 
 // Instead of guessing, ask: the possible ways to place this batch are few and easy to name.
 // The dialog only offers what makes sense for the photos you picked and the strip as it is now.
+// A tiny drawing of the outcome: filled cells are the photos you just picked, outlines are slides
+// that stay as they are. Seeing four schemes side by side beats reading four descriptions.
+function planSketch(perSlide, extraSlides = 0, keptSlides = 0) {
+  const cells = [...perSlide];
+  const width = 13, height = 17, gap = 3;
+  const total = keptSlides + cells.length + extraSlides;
+  const boxes = [];
+  let x = 0;
+  for (let i = 0; i < keptSlides; i++, x += width + gap) {
+    boxes.push(`<rect x="${x}" y="0" width="${width}" height="${height}" rx="2" fill="none" stroke="#5a5a64" stroke-dasharray="2 2"/>`);
+  }
+  cells.forEach(count => {
+    boxes.push(`<rect x="${x}" y="0" width="${width}" height="${height}" rx="2" fill="none" stroke="#8b8b95"/>`);
+    const rows = count <= 1 ? 1 : count <= 4 ? 2 : 3;
+    const cols = Math.ceil(count / rows);
+    for (let n = 0; n < count; n++) {
+      const cw = (width - 3) / cols, ch = (height - 3) / rows;
+      const cx = x + 1.5 + (n % cols) * cw, cy = 1.5 + Math.floor(n / cols) * ch;
+      boxes.push(`<rect x="${cx + .4}" y="${cy + .4}" width="${cw - .8}" height="${ch - .8}" rx="1" fill="#d9ff4b"/>`);
+    }
+    x += width + gap;
+  });
+  for (let i = 0; i < extraSlides; i++, x += width + gap) {
+    boxes.push(`<rect x="${x}" y="0" width="${width}" height="${height}" rx="2" fill="none" stroke="#d9ff4b" stroke-dasharray="2 2"/>`);
+    boxes.push(`<rect x="${x + 1.5}" y="1.5" width="${width - 3}" height="${height - 3}" rx="1" fill="#d9ff4b" opacity=".55"/>`);
+  }
+  return `<svg class="sketch" viewBox="0 0 ${Math.max(1, total * (width + gap))} ${height}" preserveAspectRatio="xMinYMid meet">${boxes.join('')}</svg>`;
+}
+
+// What each choice would actually do with these photos, worked out up front so the dialog can show
+// both the sketch and the real numbers.
 function planOptions(count) {
   const frames = project.items.filter(i => i.demo && itemKind(i) === 'image').length;
   const slides = project.slideCount;
+  const free = slidesWithRoom().length;
   const options = [];
-  if (frames) options.push({
-    id: 'frames', icon: '▧', title: `Riempi i ${frames} riquadri del template`,
-    note: count > frames ? `Le altre ${count - frames} foto restano fuori, o vanno su nuove slide se lo consenti.` : 'Le foto entrano nei riquadri già pronti.'
-  });
+
+  if (frames) {
+    const filled = Math.min(frames, count);
+    options.push({
+      id: 'frames', title: 'Riempi i riquadri del template',
+      note: count >= frames
+        ? `${filled} riquadri riempiti${count > frames ? `, ${count - frames} foto avanzano` : ''}.`
+        : `${filled} riquadri riempiti, i ${frames - filled} vuoti vengono tolti.`,
+      sketch: planSketch(Array.from({ length: slides }, (_, slide) =>
+        Math.min(filled, project.items.filter(i => i.demo && itemKind(i) === 'image' && firstSlideOf(i) === slide).length)))
+    });
+  }
+
+  const onePerSlide = Math.min(count, slides);
   options.push({
-    id: 'one', icon: '▭', title: 'Una foto per slide, a tutta pagina',
-    note: count > slides ? `Servono ${count} slide e ne hai ${slides}.` : `Occupa ${count} slide su ${slides}.`
+    id: 'one', title: 'Una foto per slide, a tutta pagina',
+    note: count > slides
+      ? `Riempie tutte le ${slides} slide, ${count - slides} foto restano fuori (o servono nuove slide).`
+      : `Occupa ${onePerSlide} slide su ${slides}.`,
+    sketch: planSketch(Array.from({ length: onePerSlide }, () => 1), 0, Math.max(0, slides - onePerSlide))
   });
+
+  const composed = spread(Math.min(count, slides * MAX_PER_SLIDE), slides);
   options.push({
-    id: 'compose', icon: '⁙', title: 'Componi più foto per slide',
-    note: `Distribuisce le ${count} foto sulle ${slides} slide, con disposizioni diverse.`
+    id: 'compose', title: 'Componi più foto per slide',
+    note: `${composed.join(' + ')} foto sulle ${slides} slide, con disposizioni diverse.`,
+    sketch: planSketch(composed)
   });
-  options.push({
-    id: 'append', icon: '＋', title: 'Aggiungi in coda, senza toccare il resto',
-    note: 'Le mette sulle slide libere, lasciando com’è quello che hai già composto.'
-  });
+
+  if (free && free < slides) {
+    const onFree = spread(Math.min(count, free * MAX_PER_SLIDE), free);
+    options.push({
+      id: 'append', title: `Solo sulle ${free} slide ancora libere`,
+      note: 'Non tocca le slide che hai già composto.',
+      sketch: planSketch(onFree, 0, slides - free)
+    });
+  }
   return options;
 }
 
@@ -1012,17 +1065,23 @@ function askLayout(sources) {
   const dialog = $('#layout-dialog');
   const options = planOptions(sources.length);
   let chosen = options[0].id;
-  $('#layout-text').textContent = `${sources.length} foto scelte, ${project.slideCount} slide nel carosello.`;
+  $('#layout-text').textContent = `${sources.length} foto scelte, ${project.slideCount} slide nel carosello. Il riquadro verde è dove finiscono.`;
   $('#layout-choices').innerHTML = options.map(option => `
     <button class="choice ${option.id === chosen ? 'active' : ''}" data-plan="${option.id}">
-      <span class="choice-ico">${option.icon}</span>
+      ${option.sketch}
       <span><b>${option.title}</b><small>${option.note}</small></span>
     </button>`).join('');
   $$('[data-plan]').forEach(button => button.onclick = () => {
     chosen = button.dataset.plan;
     $$('[data-plan]').forEach(other => other.classList.toggle('active', other === button));
   });
+
+  // the checkbox only means something when the photos actually spill over
+  const spills = sources.length > project.slideCount;
   $('#layout-grow').checked = false;
+  $('#layout-grow-row').classList.toggle('hidden', !spills);
+  $('#layout-grow-label').textContent = `Aggiungi slide se non entrano (ora ne hai ${project.slideCount})`;
+
   return new Promise(resolve => {
     $('#layout-cancel').onclick = () => { dialog.close(); resolve(null); };
     $('#layout-go').onclick = () => { dialog.close(); resolve({ plan: chosen, grow: $('#layout-grow').checked }); };
@@ -1052,13 +1111,22 @@ async function autoLayout(files) {
 
   pushUndo();
   let used = 0;
+  emptiedFrames = 0;
 
   if (plan === 'frames') {
-    project.items.filter(i => i.demo && itemKind(i) === 'image').sort(readingOrder).forEach(frame => {
+    const frames = project.items.filter(i => i.demo && itemKind(i) === 'image').sort(readingOrder);
+    frames.forEach(frame => {
       if (used >= sources.length) return;
       frame.src = sources[used++];
       frame.demo = false;
     });
+    // any frame still holding a demo picture would just look like a stray coloured rectangle:
+    // clear it out rather than leave a fake photograph in the album
+    const leftEmpty = project.items.filter(i => i.demo && itemKind(i) === 'image').length;
+    if (leftEmpty) {
+      project.items = project.items.filter(i => !(i.demo && itemKind(i) === 'image'));
+      emptiedFrames = leftEmpty;
+    }
   }
 
   const left = sources.slice(used);
@@ -1097,10 +1165,13 @@ async function autoLayout(files) {
   const leftOver = sources.length - used;
   toast(leftOver
     ? `${used} foto sistemate — ${leftOver} non entrano: aggiungi slide o consenti di aggiungerle`
-    : `${used} foto sistemate su ${project.slideCount} slide`);
+    : emptiedFrames
+      ? `${used} foto nei riquadri — ${emptiedFrames} riquadri vuoti rimossi`
+      : `${used} foto sistemate su ${project.slideCount} slide`);
 }
 
 let lastComposition = null;
+let emptiedFrames = 0;
 
 function addTextItem() {
   pushUndo();
