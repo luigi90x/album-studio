@@ -966,6 +966,39 @@ function addItem(src, how = 'free') {
 // frame, never something to grow silently. Photos are spread over those slides, more than one per
 // slide when there are many, with a different arrangement on neighbouring slides.
 const readingOrder = (a, b) => (firstSlideOf(a) - firstSlideOf(b)) || (a.y - b.y) || (a.x - b.x);
+const areaOf = item => item.w * item.h;
+
+// Filling order matters more than it looks. Straight reading order pours every photo into the first
+// slides and leaves the later ones empty — the carousel ends up with holes. So we go in rounds:
+// first the biggest frame of every slide, then the second biggest of every slide, and so on. With
+// few photos each slide still gets its main image.
+function fillOrder(frames) {
+  const bySlide = new Map();
+  frames.forEach(frame => {
+    const slide = firstSlideOf(frame);
+    if (!bySlide.has(slide)) bySlide.set(slide, []);
+    bySlide.get(slide).push(frame);
+  });
+  const slides = [...bySlide.keys()].sort((a, b) => a - b);
+  slides.forEach(slide => bySlide.get(slide).sort((a, b) => areaOf(b) - areaOf(a) || a.y - b.y || a.x - b.x));
+  const ordered = [];
+  const deepest = Math.max(0, ...slides.map(slide => bySlide.get(slide).length));
+  for (let round = 0; round < deepest; round++) {
+    slides.forEach(slide => {
+      const frame = bySlide.get(slide)[round];
+      if (frame) ordered.push(frame);
+    });
+  }
+  return ordered;
+}
+
+// Reusing a photo in a second frame is fine as long as it does not look like a duplicate: shift the
+// crop and zoom so it reads as another detail of the same shot.
+function recrop(item, repeat) {
+  const shifts = [[30, 30], [70, 35], [35, 72], [72, 68], [50, 20], [20, 55]];
+  const [panX, panY] = shifts[repeat % shifts.length];
+  Object.assign(item, { panX, panY, zoom: 100 + ((repeat % 3) + 1) * 18 });
+}
 const pick = list => list[Math.floor(Math.random() * list.length)];
 
 // how many photos land on each slide, spreading the remainder over the first ones
@@ -1103,7 +1136,14 @@ function askLayout(sources) {
     $$('[data-plan]').forEach(other => other.classList.toggle('active', other === button));
   });
 
-  // the checkbox only means something when the photos actually spill over
+  // "fill everything" only matters when there are more frames than photos
+  const openFrames = project.items.filter(i => (i.demo && itemKind(i) === 'image') || itemKind(i) === 'empty').length;
+  const shortOfPhotos = openFrames > sources.length;
+  $('#layout-fill-row').classList.toggle('hidden', !shortOfPhotos);
+  $('#layout-fill').checked = true;
+  $('#layout-fill-label').textContent = `Riempi tutti i ${openFrames} riquadri, riusando le foto con tagli diversi`;
+
+  // the slide switch only means something when the photos actually spill over
   const spills = sources.length > project.slideCount;
   $('#layout-grow').checked = false;
   $('#layout-grow-row').classList.toggle('hidden', !spills);
@@ -1111,7 +1151,7 @@ function askLayout(sources) {
 
   return new Promise(resolve => {
     $('#layout-cancel').onclick = () => { dialog.close(); resolve(null); };
-    $('#layout-go').onclick = () => { dialog.close(); resolve({ plan: chosen, grow: $('#layout-grow').checked }); };
+    $('#layout-go').onclick = () => { dialog.close(); resolve({ plan: chosen, grow: $('#layout-grow').checked, fillAll: $('#layout-fill').checked }); };
     dialog.showModal();
   });
 }
@@ -1134,11 +1174,12 @@ async function autoLayout(files) {
 
   const answer = await askLayout(sources);
   if (!answer) return;
-  const { plan, grow } = answer;
+  const { plan, grow, fillAll } = answer;
 
   pushUndo();
   let used = 0;
   emptiedFrames = 0;
+  reusedFrames = 0;
 
   if (plan === 'replace') {
     // same layout, new pictures: walk the photos in reading order and swap the sources
@@ -1149,23 +1190,35 @@ async function autoLayout(files) {
   }
 
   if (plan === 'frames') {
-    const frames = project.items
-      .filter(i => (i.demo && itemKind(i) === 'image') || itemKind(i) === 'empty')
-      .sort(readingOrder);
+    const frames = fillOrder(project.items
+      .filter(i => (i.demo && itemKind(i) === 'image') || itemKind(i) === 'empty'));
+    // first pass, one unique photo each, biggest frame of every slide first
     frames.forEach(frame => {
       if (used >= sources.length) return;
       frame.src = sources[used++];
       frame.demo = false;
       frame.placeholder = false;
     });
-    // frames still holding a demo picture become empty slots: they keep their place in the layout,
-    // are obviously not photographs, and can be filled later or left out of the export
-    project.items.filter(i => i.demo && itemKind(i) === 'image').forEach(frame => {
-      frame.src = null;
-      frame.placeholder = true;
-      frame.demo = false;
-      emptiedFrames++;
-    });
+    const stillOpen = frames.filter(frame => frame.demo || !frame.src);
+    if (fillAll && sources.length) {
+      // second pass: no gaping frames left. What is beyond the number of photos reuses them with a
+      // different crop, so the album reads as complete rather than half done.
+      stillOpen.forEach((frame, repeat) => {
+        frame.src = sources[repeat % sources.length];
+        frame.demo = false;
+        frame.placeholder = false;
+        recrop(frame, repeat);
+        reusedFrames++;
+      });
+    } else {
+      // left as empty slots: they keep their place and can be filled later, and never reach the export
+      stillOpen.forEach(frame => {
+        frame.src = null;
+        frame.placeholder = true;
+        frame.demo = false;
+        emptiedFrames++;
+      });
+    }
   }
 
   const left = sources.slice(used);
@@ -1205,13 +1258,16 @@ async function autoLayout(files) {
   const leftOver = sources.length - used;
   toast(leftOver
     ? `${used} foto sistemate — ${leftOver} non entrano: aggiungi slide o consenti di aggiungerle`
-    : emptiedFrames
-      ? `${used} foto nei riquadri — ${emptiedFrames} riquadri vuoti rimossi`
-      : `${used} foto sistemate su ${project.slideCount} slide`);
+    : reusedFrames
+      ? `Riempito tutto: ${used} foto, ${reusedFrames} riquadri riusano una foto con un taglio diverso`
+      : emptiedFrames
+        ? `${used} foto nei riquadri — ${emptiedFrames} restano vuoti, riempili quando vuoi`
+        : `${used} foto sistemate su ${project.slideCount} slide`);
 }
 
 let lastComposition = null;
 let emptiedFrames = 0;
+let reusedFrames = 0;
 
 function addTextItem() {
   pushUndo();
