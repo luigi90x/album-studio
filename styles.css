@@ -183,6 +183,9 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 #project-title:focus{outline:1px solid var(--accent);border-color:var(--accent)}
 #item-text{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:9px;font:13px inherit;resize:vertical;margin-bottom:10px;min-height:64px}
 #item-text:focus{outline:1px solid var(--accent);border-color:var(--accent)}
+.corner-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;margin-top:8px}
+.corner-grid label{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+.corner-grid input{flex:1;min-width:0}
 .mini-segmented{display:flex;gap:3px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:2px}
 .mini-segmented button{border:0;background:transparent;color:var(--muted);width:34px;height:30px;border-radius:6px;cursor:pointer;font-size:12px}
 .mini-segmented button.active{background:#34343d;color:var(--accent)}
@@ -278,6 +281,13 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 .help-list{margin:0 0 20px;padding-left:18px;color:var(--muted);font-size:12.5px;line-height:1.6}
 .help-list b{color:var(--text)}
 .help-list li{margin-bottom:9px}
+.choices{display:grid;gap:7px;margin-bottom:14px}
+.choice{display:flex;gap:11px;align-items:flex-start;text-align:left;border:1px solid var(--line);background:var(--panel-2);border-radius:11px;padding:11px;cursor:pointer;min-height:var(--tap)}
+.choice:hover{border-color:#41414c}
+.choice.active{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.choice-ico{font-size:17px;color:var(--accent);line-height:1.2}
+.choice b{display:block;font-size:12.5px;margin-bottom:2px}
+.choice small{color:var(--muted);font-size:10.5px;line-height:1.4}
 .wide-dialog{width:min(560px,94vw)}
 .export-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:10px;margin-bottom:16px;max-height:46vh;overflow-y:auto}
 .export-item{margin:0;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:7px;text-align:center}

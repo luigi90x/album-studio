@@ -191,6 +191,9 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 #project-title:focus{outline:1px solid var(--accent);border-color:var(--accent)}
 #item-text{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:9px;font:13px inherit;resize:vertical;margin-bottom:10px;min-height:64px}
 #item-text:focus{outline:1px solid var(--accent);border-color:var(--accent)}
+.corner-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px;margin-top:8px}
+.corner-grid label{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+.corner-grid input{flex:1;min-width:0}
 .mini-segmented{display:flex;gap:3px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:2px}
 .mini-segmented button{border:0;background:transparent;color:var(--muted);width:34px;height:30px;border-radius:6px;cursor:pointer;font-size:12px}
 .mini-segmented button.active{background:#34343d;color:var(--accent)}
@@ -286,6 +289,13 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 .help-list{margin:0 0 20px;padding-left:18px;color:var(--muted);font-size:12.5px;line-height:1.6}
 .help-list b{color:var(--text)}
 .help-list li{margin-bottom:9px}
+.choices{display:grid;gap:7px;margin-bottom:14px}
+.choice{display:flex;gap:11px;align-items:flex-start;text-align:left;border:1px solid var(--line);background:var(--panel-2);border-radius:11px;padding:11px;cursor:pointer;min-height:var(--tap)}
+.choice:hover{border-color:#41414c}
+.choice.active{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.choice-ico{font-size:17px;color:var(--accent);line-height:1.2}
+.choice b{display:block;font-size:12.5px;margin-bottom:2px}
+.choice small{color:var(--muted);font-size:10.5px;line-height:1.4}
 .wide-dialog{width:min(560px,94vw)}
 .export-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:10px;margin-bottom:16px;max-height:46vh;overflow-y:auto}
 .export-item{margin:0;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:7px;text-align:center}
@@ -369,7 +379,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
       </nav>
       <div class="top-actions">
         <button class="btn icon" id="help-open" title="Come funziona">?</button>
-        <button class="btn" id="save-template" title="Salva la composizione come template riutilizzabile, senza le foto">Template</button>
+        <button class="btn" id="new-project" title="Comincia un carosello da zero">Nuovo</button>
         <button class="btn" id="save-project" title="Salva il progetto su questo dispositivo">Salva</button>
         <button class="btn primary" id="export-open" title="Genera le slide pronte da pubblicare">Esporta</button>
       </div>
@@ -558,8 +568,28 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
                   <option value="polaroid">Polaroid</option>
                 </select>
               </div>
-              <label class="range-label">Angoli arrotondati <output id="item-radius-value">12</output></label>
-              <input id="item-radius" type="range" min="0" max="60" value="12">
+              <div class="field"><span>Forma</span>
+                <select id="item-shape" title="Ritaglia l'elemento: vale anche nell'export">
+                  <option value="rect">Rettangolo</option>
+                  <option value="circle">Cerchio</option>
+                  <option value="pill">Pillola</option>
+                  <option value="arch">Arco</option>
+                  <option value="leaf">Foglia</option>
+                  <option value="diamond">Rombo</option>
+                  <option value="hexagon">Esagono</option>
+                </select>
+              </div>
+              <div id="corner-controls">
+                <label class="range-label">Angoli arrotondati <output id="item-radius-value">12</output></label>
+                <input id="item-radius" type="range" min="0" max="60" value="12">
+                <label class="check"><input id="corner-split" type="checkbox"> Regola ogni angolo</label>
+                <div id="corner-grid" class="corner-grid hidden">
+                  <label>↖<input id="corner-tl" type="range" min="0" max="60" value="12" title="In alto a sinistra"></label>
+                  <label>↗<input id="corner-tr" type="range" min="0" max="60" value="12" title="In alto a destra"></label>
+                  <label>↙<input id="corner-bl" type="range" min="0" max="60" value="12" title="In basso a sinistra"></label>
+                  <label>↘<input id="corner-br" type="range" min="0" max="60" value="12" title="In basso a destra"></label>
+                </div>
+              </div>
               <div class="field"><span>Velo colorato</span><input id="item-tint-color" type="color" value="#000000" title="Tinta stesa sopra questa immagine: scurisce o colora"></div>
               <label class="range-label">Intensità del velo <output id="item-tint-value">0</output></label>
               <input id="item-tint" type="range" min="0" max="80" value="0" title="Utile sull'immagine di fondo, per far risaltare quelle sopra">
@@ -647,6 +677,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
               <div class="field"><span>Colore di fondo</span><input id="bg-color" type="color" value="#1b1b1b" title="Si vede dove non ci sono foto"></div>
               <label class="check" title="Aggiunge 1/4, 2/4… in basso a ogni slide, anche nell'export"><input id="show-numbers" type="checkbox"> Numera le slide (1/4)</label>
               <label class="check" title="Mostra i confini tra slide e il margine di sicurezza"><input id="show-guides" type="checkbox" checked> Mostra confini e margini</label>
+              <button class="btn wide" id="save-template" title="Salva la composizione come template riutilizzabile: tiene le forme, non le foto">Salva come template</button>
               <p class="note" style="margin-top:12px">Le foto restano sul tuo dispositivo. Niente account, niente upload.</p>
             </div>
           </details>
@@ -703,6 +734,25 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
     <button class="btn primary wide" id="help-close">Ho capito</button>
   </dialog>
 
+  <dialog id="new-dialog" class="dialog">
+    <h2>Nuovo progetto</h2>
+    <p id="new-text">Il progetto aperto ha modifiche non salvate. Cosa ne faccio?</p>
+    <button class="btn primary wide" id="new-save">Salva questo, poi ricomincia</button>
+    <button class="btn wide danger" id="new-discard">Ricomincia senza salvare</button>
+    <button class="btn wide ghost" id="new-cancel">Annulla</button>
+  </dialog>
+
+  <dialog id="layout-dialog" class="dialog">
+    <h2 id="layout-title">Come dispongo le foto?</h2>
+    <p id="layout-text"></p>
+    <div id="layout-choices" class="choices"></div>
+    <label class="check" id="layout-grow-row"><input id="layout-grow" type="checkbox"> Aggiungi slide se non entrano</label>
+    <div class="btn-row">
+      <button class="btn wide ghost" id="layout-cancel">Annulla</button>
+      <button class="btn wide primary" id="layout-go">Disponi</button>
+    </div>
+  </dialog>
+
   <dialog id="confirm-dialog" class="dialog">
     <h2 id="confirm-title">Confermi?</h2>
     <p id="confirm-text"></p>
@@ -754,7 +804,7 @@ const newItem = (src, over) => ({
   id: uid(), src,
   x: 0.15, y: 0.18, w: 0.7, h: 0.5,
   zoom: 100, panX: 50, panY: 50,
-  rotation: 0, radius: 12, frame: 'clean',
+  rotation: 0, radius: 12, corners: null, shape: 'rect', frame: 'clean',
   tintColor: '#000000', tintOpacity: 0,
   look: 'none', grain: 0, vignette: 0,
   exposure: 0, contrast: 0, saturation: 0, warmth: 0, shadows: 0,
@@ -797,6 +847,7 @@ const snapshot = () => ({
 });
 
 function pushUndo() {
+  dirty = true;
   undoStack.push(snapshot());
   if (undoStack.length > UNDO_LIMIT) undoStack.shift();
   redoStack = [];
@@ -899,6 +950,32 @@ function adjustmentCSS(item) {
 
 const photoCSS = (item, frameFilter) =>
   [frameFilter, (LOOKS[item.look] || LOOKS.none).css, adjustmentCSS(item)].filter(Boolean).join(' ');
+
+// Shapes an item can be cut to. Everything is expressed as a path so the browser and the export
+// canvas can be given the same geometry: CSS gets a clip-path, canvas gets the same points.
+const SHAPES = {
+  rect:    { label: 'Rettangolo' },
+  circle:  { label: 'Cerchio' },
+  pill:    { label: 'Pillola' },
+  arch:    { label: 'Arco' },
+  diamond: { label: 'Rombo', points: [[50, 0], [100, 50], [50, 100], [0, 50]] },
+  hexagon: { label: 'Esagono', points: [[25, 0], [75, 0], [100, 50], [75, 100], [25, 100], [0, 50]] },
+  leaf:    { label: 'Foglia' }
+};
+
+// corners: null means "all the same", otherwise [topLeft, topRight, bottomRight, bottomLeft]
+const cornerList = item => (Array.isArray(item.corners) ? item.corners : [item.radius, item.radius, item.radius, item.radius]);
+
+function shapeCSS(item, scale) {
+  const shape = item.shape || 'rect';
+  if (shape === 'circle') return { clip: '', radius: '50%' };
+  if (shape === 'pill') return { clip: '', radius: '999px' };
+  if (shape === 'arch') return { clip: '', radius: '50% 50% 8% 8% / 40% 40% 4% 4%' };
+  if (shape === 'leaf') return { clip: '', radius: '50% 8% 50% 8%' };
+  const spec = SHAPES[shape];
+  if (spec && spec.points) return { clip: `polygon(${spec.points.map(([x, y]) => `${x}% ${y}%`).join(', ')})`, radius: '0' };
+  return { clip: '', radius: cornerList(item).map(value => `${value * scale}px`).join(' ') };
+}
 
 // three shapes of the same item: a photo, a solid block, or a piece of text
 const itemKind = item => (item.text !== undefined && item.text !== null ? 'text' : item.src ? 'image' : 'colour');
@@ -1093,7 +1170,10 @@ function styleItem(node, item, width) {
   box.style.borderStyle = 'solid';
   box.style.borderColor = spec.color;
   box.style.borderWidth = `${b}px ${b}px ${bb}px`;
-  box.style.borderRadius = `${framePx(item.radius * 3, width)}px`;
+  const shaped = shapeCSS(item, framePx(3, width));
+  box.style.borderRadius = shaped.radius;
+  box.style.clipPath = shaped.clip;
+  node.style.setProperty('--shape-clip', shaped.clip || 'none');
   const kind = itemKind(item);
   box.style.background = kind === 'image' ? '#111'
     : kind === 'text' ? rgba(item.fill || '#000000', (item.fillOpacity ?? 0) / 100)
@@ -1333,6 +1413,19 @@ function renderInspector() {
     $$('[data-style]').forEach(b => b.classList.toggle('active', Boolean(item[b.dataset.style])));
   }
   $('#item-frame').value = item.frame;
+  $('#item-shape').value = item.shape || 'rect';
+  const perCorner = Array.isArray(item.corners);
+  const roundable = !SHAPES[item.shape || 'rect'].points && !['circle', 'pill', 'arch', 'leaf'].includes(item.shape);
+  $('#corner-controls').classList.toggle('hidden', !roundable);
+  $('#corner-split').checked = perCorner;
+  $('#corner-grid').classList.toggle('hidden', !perCorner);
+  $('#item-radius').previousElementSibling.classList.toggle('hidden', perCorner);   // its own label
+  $('#item-radius').classList.toggle('hidden', perCorner);
+  if (perCorner) {
+    const [tl, tr, br, bl] = item.corners;
+    $('#corner-tl').value = tl; $('#corner-tr').value = tr;
+    $('#corner-br').value = br; $('#corner-bl').value = bl;
+  }
   $('#item-look').value = item.look || 'none';
   $('#item-grain').value = item.grain || 0;
   $('#item-grain-value').value = item.grain || 0;
@@ -1367,6 +1460,7 @@ function renderInspector() {
 }
 
 let shownItem = null;
+let dirty = false;          // something changed since the last explicit save
 let activeScope = 'slide';   // which panel group the phone tab bar is showing
 
 // On a phone the three scopes (element / slide / carousel) become tabs instead of one long scroll.
@@ -1665,6 +1759,58 @@ function composeSlide(slideIndex, sources, style, avoid) {
   return arrangement;
 }
 
+// Instead of guessing, ask: the possible ways to place this batch are few and easy to name.
+// The dialog only offers what makes sense for the photos you picked and the strip as it is now.
+function planOptions(count) {
+  const frames = project.items.filter(i => i.demo && itemKind(i) === 'image').length;
+  const slides = project.slideCount;
+  const options = [];
+  if (frames) options.push({
+    id: 'frames', icon: '▧', title: `Riempi i ${frames} riquadri del template`,
+    note: count > frames ? `Le altre ${count - frames} foto restano fuori, o vanno su nuove slide se lo consenti.` : 'Le foto entrano nei riquadri già pronti.'
+  });
+  options.push({
+    id: 'one', icon: '▭', title: 'Una foto per slide, a tutta pagina',
+    note: count > slides ? `Servono ${count} slide e ne hai ${slides}.` : `Occupa ${count} slide su ${slides}.`
+  });
+  options.push({
+    id: 'compose', icon: '⁙', title: 'Componi più foto per slide',
+    note: `Distribuisce le ${count} foto sulle ${slides} slide, con disposizioni diverse.`
+  });
+  options.push({
+    id: 'append', icon: '＋', title: 'Aggiungi in coda, senza toccare il resto',
+    note: 'Le mette sulle slide libere, lasciando com’è quello che hai già composto.'
+  });
+  return options;
+}
+
+function askLayout(sources) {
+  const dialog = $('#layout-dialog');
+  const options = planOptions(sources.length);
+  let chosen = options[0].id;
+  $('#layout-text').textContent = `${sources.length} foto scelte, ${project.slideCount} slide nel carosello.`;
+  $('#layout-choices').innerHTML = options.map(option => `
+    <button class="choice ${option.id === chosen ? 'active' : ''}" data-plan="${option.id}">
+      <span class="choice-ico">${option.icon}</span>
+      <span><b>${option.title}</b><small>${option.note}</small></span>
+    </button>`).join('');
+  $$('[data-plan]').forEach(button => button.onclick = () => {
+    chosen = button.dataset.plan;
+    $$('[data-plan]').forEach(other => other.classList.toggle('active', other === button));
+  });
+  $('#layout-grow').checked = false;
+  return new Promise(resolve => {
+    $('#layout-cancel').onclick = () => { dialog.close(); resolve(null); };
+    $('#layout-go').onclick = () => { dialog.close(); resolve({ plan: chosen, grow: $('#layout-grow').checked }); };
+    dialog.showModal();
+  });
+}
+
+function slidesWithRoom() {
+  return Array.from({ length: project.slideCount }, (_, i) => i)
+    .filter(i => !project.items.some(item => item.x < i + 1 && item.x + item.w > i));
+}
+
 async function autoLayout(files) {
   const list = [...files].filter(f => f.type.startsWith('image/'));
   if (!list.length) { toast('Scegli delle immagini'); return; }
@@ -1676,34 +1822,48 @@ async function autoLayout(files) {
   }
   if (!sources.length) return;
 
+  const answer = await askLayout(sources);
+  if (!answer) return;
+  const { plan, grow } = answer;
+
   pushUndo();
   let used = 0;
 
-  // 1. a template's empty frames come first: that is what they are there for
-  const frames = project.items.filter(i => i.demo && itemKind(i) === 'image').sort(readingOrder);
-  frames.forEach(frame => {
-    if (used >= sources.length) return;
-    frame.src = sources[used++];
-    frame.demo = false;
-  });
+  if (plan === 'frames') {
+    project.items.filter(i => i.demo && itemKind(i) === 'image').sort(readingOrder).forEach(frame => {
+      if (used >= sources.length) return;
+      frame.src = sources[used++];
+      frame.demo = false;
+    });
+  }
 
-  // 2. the rest is arranged over the slides that already exist, never adding any
   const left = sources.slice(used);
-  if (left.length) {
-    const freeSlides = Array.from({ length: project.slideCount }, (_, i) => i)
-      .filter(i => !project.items.some(item => insideSlide(item, i) || (item.x < i + 1 && item.x + item.w > i)));
-    const targets = freeSlides.length ? freeSlides : Array.from({ length: project.slideCount }, (_, i) => i);
-    const perSlide = spread(Math.min(left.length, targets.length * MAX_PER_SLIDE), targets.length);
+  if (left.length && plan !== 'frames') {
+    const targets = plan === 'append' ? slidesWithRoom() : Array.from({ length: project.slideCount }, (_, i) => i);
+    const perSlide = plan === 'one'
+      ? targets.map(() => 1)
+      : spread(Math.min(left.length, targets.length * MAX_PER_SLIDE), targets.length);
     const style = pick(STYLES);
     let taken = 0, previous = null;
     targets.forEach((slide, position) => {
-      const count = perSlide[position];
-      if (!count) return;
+      const count = Math.min(perSlide[position] || 0, left.length - taken);
+      if (count <= 0) return;
       previous = composeSlide(slide, left.slice(taken, taken + count), style, previous);
       taken += count;
     });
     used += taken;
     if (taken) lastComposition = style.name;
+  }
+
+  // whatever is still over needs new slides, and only if you allowed it
+  if (grow) {
+    const style = pick(STYLES);
+    while (used < sources.length && project.slideCount < MAX_SLIDES) {
+      const slide = project.slideCount++;
+      const room = Math.min(sources.length - used, plan === 'one' ? 1 : MAX_PER_SLIDE > 2 ? 2 : 1);
+      composeSlide(slide, sources.slice(used, used + room), style, null);
+      used += room;
+    }
   }
 
   selectedItem = null;
@@ -1712,10 +1872,8 @@ async function autoLayout(files) {
   fitZoom();
   const leftOver = sources.length - used;
   toast(leftOver
-    ? `${used} foto sistemate su ${project.slideCount} slide — ${leftOver} non entrano: aggiungi slide e ripeti`
-    : frames.length && used === frames.length
-      ? `${used} foto inserite nei riquadri del template`
-      : `${used} foto disposte su ${project.slideCount} slide, stile ${lastComposition || 'pulito'}`);
+    ? `${used} foto sistemate — ${leftOver} non entrano: aggiungi slide o consenti di aggiungerle`
+    : `${used} foto sistemate su ${project.slideCount} slide`);
 }
 
 let lastComposition = null;
@@ -1926,6 +2084,8 @@ function demoScene(scene = 'sunset') {
 }
 
 const bgSpan = (x, w, scene) => newItem(demoScene(scene), { x, y: 0, w, h: 1, frame: 'none', radius: 0, demo: true });
+const shaped = (x, y, w, h, shape, scene, step) =>
+  newItem(demoScene(sibling(scene, step)), { x, y, w, h, shape, frame: shape === 'rect' ? 'clean' : 'none', radius: 0, demo: true });
 const spanItem = (x, w, scene, frame) => newItem(demoScene(sibling(scene, 3)), { x, y: 0.24, w, h: 0.5, frame, radius: 10, demo: true });
 const recipeItems = (recipe, slide, scene, frame) => (RECIPES[recipe] || RECIPES.cover).map(([x, y, w, h, r], i) =>
   newItem(demoScene(sibling(scene, i + 2)), { x: slide + x, y, w, h, radius: r, frame, rotation: i % 2 ? 2 : -2, demo: true }));
@@ -1941,12 +2101,34 @@ const TEMPLATES = [
     build: s => [bgSpan(0, 1, s), ...recipeItems('contact', 0, s, 'film'), bgSpan(1, 3, s), ...recipeItems('tall', 2, s, 'film'), ...recipeItems('cover', 3, s, 'glass')] },
   { id: 'coast', name: 'Coast postcard', desc: 'Mare continuo e cartoline sovrapposte.', scene: 'coast', color: '#2f5c69', slides: 5,
     build: s => [bgSpan(0, 5, s), ...recipeItems('cover', 0, s, 'polaroid'), spanItem(1.4, 1.4, s, 'clean'), ...recipeItems('duo', 3, s, 'paper'), ...recipeItems('cover', 4, s, 'glass')] },
+  { id: 'bubbles', name: 'Bolle', desc: 'Cerchi e pillole su fondo pieno: pulito e moderno.', scene: 'blue', color: '#20323f', slides: 4,
+    build: s => [
+      bgSpan(0, 4, s),
+      shaped(0.16, 0.14, 0.68, 0.52, 'circle', s, 1), shaped(0.3, 0.7, 0.4, 0.16, 'pill', s, 2),
+      shaped(1.12, 0.2, 0.36, 0.29, 'circle', s, 3), shaped(1.55, 0.35, 0.36, 0.29, 'circle', s, 4),
+      shaped(2.14, 0.16, 0.72, 0.4, 'pill', s, 2), shaped(2.24, 0.62, 0.52, 0.28, 'circle', s, 1),
+      shaped(3.18, 0.18, 0.64, 0.5, 'arch', s, 3)
+    ] },
+  { id: 'gems', name: 'Gemme', desc: 'Rombi ed esagoni, per un carosello grafico.', scene: 'garden', color: '#2f3a2c', slides: 4,
+    build: s => [
+      bgSpan(0, 4, s),
+      shaped(0.18, 0.16, 0.64, 0.48, 'hexagon', s, 2), shaped(0.3, 0.66, 0.4, 0.24, 'diamond', s, 3),
+      shaped(1.1, 0.22, 0.38, 0.3, 'diamond', s, 1), shaped(1.52, 0.44, 0.38, 0.3, 'hexagon', s, 4),
+      shaped(2.16, 0.14, 0.68, 0.54, 'leaf', s, 2),
+      shaped(3.14, 0.2, 0.3, 0.24, 'hexagon', s, 1), shaped(3.5, 0.2, 0.3, 0.24, 'hexagon', s, 3), shaped(3.32, 0.52, 0.36, 0.28, 'diamond', s, 4)
+    ] },
   { id: 'rose', name: 'Rose after dark', desc: 'Scuro e romantico, con una foto lunga al centro.', scene: 'rose', color: '#3b2030', slides: 4,
     build: s => [bgSpan(0, 4, s), ...recipeItems('cover', 0, s, 'polaroid'), spanItem(1.15, 2.2, s, 'glass'), ...recipeItems('duo', 3, s, 'paper')] }
 ];
 
 // Card art: the strip laid out at full width inside a 4:5 window, shifted to the slide we want.
 // Same geometry as the editor, so what the card shows is what the template gives you.
+// shape of a card thumbnail: same rules as the editor, expressed inline
+function shapePreviewCSS(item) {
+  const shaped = shapeCSS(item, 0.2);
+  return `border-radius:${shaped.radius}${shaped.clip ? `;clip-path:${shaped.clip}` : ''}`;
+}
+
 function stripHTML(items, count, offset) {
   const shots = items.map(i => {
     const spec = FRAMES[i.frame] || FRAMES.clean;
@@ -1954,7 +2136,7 @@ function stripHTML(items, count, offset) {
     return `<div style="position:absolute;left:${i.x / count * 100}%;top:${i.y * 100}%;width:${i.w / count * 100}%;height:${i.h * 100}%;
       background-image:url('${i.src}');background-size:cover;background-position:center;
       border:${border}px solid ${spec.color};border-bottom-width:${spec.bottom > spec.border ? border * 3 : border}px;
-      border-radius:${i.radius / 5}px;box-shadow:${i.frame === 'none' ? 'none' : '0 3px 8px #0007'};transform:rotate(${i.rotation}deg)"></div>`;
+      ${shapePreviewCSS(i)};box-shadow:${i.frame === 'none' ? 'none' : '0 3px 8px #0007'};transform:rotate(${i.rotation}deg)"></div>`;
   }).join('');
   return `<div style="position:absolute;top:0;left:${-offset * 100}%;width:${count * 100}%;height:100%">${shots}</div>`;
 }
@@ -2171,6 +2353,7 @@ async function saveProject() {
   try {
     await putProject(clone(project));
     await putProject({ ...clone(project), id: AUTOSAVE_ID, autosave: true, savedAs: project.id });
+    dirty = false;
     toast(storageMode === 'local'
       ? 'Progetto salvato (spazio limitato: tieni un backup JSON)'
       : 'Progetto salvato su questo dispositivo');
@@ -2232,15 +2415,47 @@ async function renderProjects() {
 
 /* --------------------------------------------------------------- export */
 
+// One rounded rectangle, optionally with a different radius per corner (top-left, top-right,
+// bottom-right, bottom-left) — the same four values the inspector edits.
 function roundedRect(ctx, x, y, w, h, r) {
-  const rad = Math.max(0, Math.min(r, w / 2, h / 2));
+  const limit = Math.min(w, h) / 2;
+  const [tl, tr, br, bl] = (Array.isArray(r) ? r : [r, r, r, r]).map(value => Math.max(0, Math.min(value, limit)));
   ctx.beginPath();
-  ctx.moveTo(x + rad, y);
-  ctx.arcTo(x + w, y, x + w, y + h, rad);
-  ctx.arcTo(x + w, y + h, x, y + h, rad);
-  ctx.arcTo(x, y + h, x, y, rad);
-  ctx.arcTo(x, y, x + w, y, rad);
+  ctx.moveTo(x + tl, y);
+  ctx.lineTo(x + w - tr, y);
+  ctx.arcTo(x + w, y, x + w, y + tr, tr);
+  ctx.lineTo(x + w, y + h - br);
+  ctx.arcTo(x + w, y + h, x + w - br, y + h, br);
+  ctx.lineTo(x + bl, y + h);
+  ctx.arcTo(x, y + h, x, y + h - bl, bl);
+  ctx.lineTo(x, y + tl);
+  ctx.arcTo(x, y, x + tl, y, tl);
   ctx.closePath();
+}
+
+// The export counterpart of shapeCSS: same shapes, drawn as canvas paths.
+function shapePath(ctx, item, x, y, w, h, radiusScale) {
+  const shape = item.shape || 'rect';
+  const spec = SHAPES[shape];
+  if (spec && spec.points) {
+    ctx.beginPath();
+    spec.points.forEach(([px, py], index) => {
+      const pointX = x + (px / 100) * w, pointY = y + (py / 100) * h;
+      if (index === 0) ctx.moveTo(pointX, pointY); else ctx.lineTo(pointX, pointY);
+    });
+    ctx.closePath();
+    return;
+  }
+  if (shape === 'circle') {
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h / 2, w / 2, h / 2, 0, 0, Math.PI * 2);
+    ctx.closePath();
+    return;
+  }
+  if (shape === 'pill') { roundedRect(ctx, x, y, w, h, Math.min(w, h) / 2); return; }
+  if (shape === 'arch') { roundedRect(ctx, x, y, w, h, [w / 2, w / 2, w * .06, w * .06]); return; }
+  if (shape === 'leaf') { roundedRect(ctx, x, y, w, h, [Math.min(w, h) / 2, w * .06, Math.min(w, h) / 2, w * .06]); return; }
+  roundedRect(ctx, x, y, w, h, cornerList(item).map(value => value * radiusScale));
 }
 
 // Canvas has no word wrap: break on spaces, and hard-break a word too long for the line.
@@ -2321,13 +2536,12 @@ function drawItem(ctx, item, image, index) {
   ctx.save();
   ctx.translate(bx + bw / 2, by + bh / 2);
   ctx.rotate((item.rotation || 0) * Math.PI / 180);
-  const radius = item.radius * 3;
   if (spec.border) {
     ctx.shadowColor = 'rgba(0,0,0,.4)';
     ctx.shadowBlur = 26;
     ctx.shadowOffsetY = 12;
     ctx.fillStyle = spec.color;
-    roundedRect(ctx, -bw / 2, -bh / 2, bw, bh, radius);
+    shapePath(ctx, item, -bw / 2, -bh / 2, bw, bh, 3);
     ctx.fill();
     ctx.shadowColor = 'transparent';
   }
@@ -2338,7 +2552,7 @@ function drawItem(ctx, item, image, index) {
   const ix = -bw / 2 + spec.border, iy = -bh / 2 + spec.border;
   const iw = bw - spec.border * 2, ih = bh - spec.border - spec.bottom;
   if (iw <= 0 || ih <= 0) { ctx.restore(); return; }
-  roundedRect(ctx, ix, iy, iw, ih, Math.max(0, radius - spec.border));
+  shapePath(ctx, item, ix, iy, iw, ih, Math.max(0, 3 - spec.border / Math.max(1, item.radius || 1)));
   ctx.clip();
   if (itemKind(item) === 'text') {
     if (item.fillOpacity) {
@@ -2519,6 +2733,31 @@ function confirmAction(title, text, okLabel, onConfirm) {
   dialog.showModal();
 }
 
+// Starting over: never silently throw away work. If nothing has changed there is nothing to ask.
+function startNewProject() {
+  const fresh = () => {
+    project = newProject();
+    applyFormat(project.format);
+    undoStack = [];
+    redoStack = [];
+    selectedSlide = 0;
+    selectedItem = null;
+    dirty = false;
+    showPanel('editor');
+    fitZoom();
+    toast('Nuovo progetto');
+  };
+  if (!project.items.length || !dirty) { fresh(); return; }
+  const dialog = $('#new-dialog');
+  $('#new-text').textContent = project.id
+    ? `“${project.title}” ha modifiche non salvate. Cosa ne faccio?`
+    : `“${project.title}” non è mai stato salvato. Cosa ne faccio?`;
+  $('#new-save').onclick = async () => { dialog.close(); await saveProject(); fresh(); };
+  $('#new-discard').onclick = () => { dialog.close(); fresh(); };
+  $('#new-cancel').onclick = () => dialog.close();
+  dialog.showModal();
+}
+
 function showPanel(name) {
   $$('.tab').forEach(t => t.classList.toggle('active', t.dataset.panel === name));
   $$('.panel').forEach(p => p.classList.toggle('active', p.id === `${name}-panel`));
@@ -2632,6 +2871,22 @@ function init() {
   bindRange('#item-radius', 'radius');
   bindRange('#item-rotation', 'rotation', v => `${v}°`);
   $('#item-frame').onchange = () => { const i = selected(); if (i) { i.frame = $('#item-frame').value; render(); } };
+  $('#item-shape').onchange = () => { const i = selected(); if (i) { pushUndo(); i.shape = $('#item-shape').value; render(); } };
+  $('#corner-split').onchange = e => {
+    const i = selected();
+    if (!i) return;
+    pushUndo();
+    i.corners = e.target.checked ? [i.radius, i.radius, i.radius, i.radius] : null;
+    render();
+  };
+  [['tl', 0], ['tr', 1], ['br', 2], ['bl', 3]].forEach(([corner, index]) => {
+    $(`#corner-${corner}`).oninput = e => {
+      const i = selected();
+      if (!i || !Array.isArray(i.corners)) return;
+      i.corners[index] = +e.target.value;
+      render();
+    };
+  });
   $('#item-look').onchange = () => { const i = selected(); if (i) { pushUndo(); i.look = $('#item-look').value; render(); } };
   bindRange('#item-grain', 'grain');
   bindRange('#item-vignette', 'vignette');
@@ -2684,6 +2939,7 @@ function init() {
 
   $('#save-project').onclick = saveProject;
   $('#save-template').onclick = saveAsTemplate;
+  $('#new-project').onclick = startNewProject;
   $('#export-open').onclick = () => { $('#export-dialog').showModal(); prepareExport(); };
   $('#close-export').onclick = () => $('#export-dialog').close();
   $('#export-dialog').addEventListener('close', clearExports);

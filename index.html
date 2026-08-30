@@ -18,7 +18,7 @@
       </nav>
       <div class="top-actions">
         <button class="btn icon" id="help-open" title="Come funziona">?</button>
-        <button class="btn" id="save-template" title="Salva la composizione come template riutilizzabile, senza le foto">Template</button>
+        <button class="btn" id="new-project" title="Comincia un carosello da zero">Nuovo</button>
         <button class="btn" id="save-project" title="Salva il progetto su questo dispositivo">Salva</button>
         <button class="btn primary" id="export-open" title="Genera le slide pronte da pubblicare">Esporta</button>
       </div>
@@ -207,8 +207,28 @@
                   <option value="polaroid">Polaroid</option>
                 </select>
               </div>
-              <label class="range-label">Angoli arrotondati <output id="item-radius-value">12</output></label>
-              <input id="item-radius" type="range" min="0" max="60" value="12">
+              <div class="field"><span>Forma</span>
+                <select id="item-shape" title="Ritaglia l'elemento: vale anche nell'export">
+                  <option value="rect">Rettangolo</option>
+                  <option value="circle">Cerchio</option>
+                  <option value="pill">Pillola</option>
+                  <option value="arch">Arco</option>
+                  <option value="leaf">Foglia</option>
+                  <option value="diamond">Rombo</option>
+                  <option value="hexagon">Esagono</option>
+                </select>
+              </div>
+              <div id="corner-controls">
+                <label class="range-label">Angoli arrotondati <output id="item-radius-value">12</output></label>
+                <input id="item-radius" type="range" min="0" max="60" value="12">
+                <label class="check"><input id="corner-split" type="checkbox"> Regola ogni angolo</label>
+                <div id="corner-grid" class="corner-grid hidden">
+                  <label>↖<input id="corner-tl" type="range" min="0" max="60" value="12" title="In alto a sinistra"></label>
+                  <label>↗<input id="corner-tr" type="range" min="0" max="60" value="12" title="In alto a destra"></label>
+                  <label>↙<input id="corner-bl" type="range" min="0" max="60" value="12" title="In basso a sinistra"></label>
+                  <label>↘<input id="corner-br" type="range" min="0" max="60" value="12" title="In basso a destra"></label>
+                </div>
+              </div>
               <div class="field"><span>Velo colorato</span><input id="item-tint-color" type="color" value="#000000" title="Tinta stesa sopra questa immagine: scurisce o colora"></div>
               <label class="range-label">Intensità del velo <output id="item-tint-value">0</output></label>
               <input id="item-tint" type="range" min="0" max="80" value="0" title="Utile sull'immagine di fondo, per far risaltare quelle sopra">
@@ -296,6 +316,7 @@
               <div class="field"><span>Colore di fondo</span><input id="bg-color" type="color" value="#1b1b1b" title="Si vede dove non ci sono foto"></div>
               <label class="check" title="Aggiunge 1/4, 2/4… in basso a ogni slide, anche nell'export"><input id="show-numbers" type="checkbox"> Numera le slide (1/4)</label>
               <label class="check" title="Mostra i confini tra slide e il margine di sicurezza"><input id="show-guides" type="checkbox" checked> Mostra confini e margini</label>
+              <button class="btn wide" id="save-template" title="Salva la composizione come template riutilizzabile: tiene le forme, non le foto">Salva come template</button>
               <p class="note" style="margin-top:12px">Le foto restano sul tuo dispositivo. Niente account, niente upload.</p>
             </div>
           </details>
@@ -350,6 +371,25 @@
       <li><b>Esporta.</b> Una PNG per slide nel formato scelto, tagliate esattamente sui confini.</li>
     </ol>
     <button class="btn primary wide" id="help-close">Ho capito</button>
+  </dialog>
+
+  <dialog id="new-dialog" class="dialog">
+    <h2>Nuovo progetto</h2>
+    <p id="new-text">Il progetto aperto ha modifiche non salvate. Cosa ne faccio?</p>
+    <button class="btn primary wide" id="new-save">Salva questo, poi ricomincia</button>
+    <button class="btn wide danger" id="new-discard">Ricomincia senza salvare</button>
+    <button class="btn wide ghost" id="new-cancel">Annulla</button>
+  </dialog>
+
+  <dialog id="layout-dialog" class="dialog">
+    <h2 id="layout-title">Come dispongo le foto?</h2>
+    <p id="layout-text"></p>
+    <div id="layout-choices" class="choices"></div>
+    <label class="check" id="layout-grow-row"><input id="layout-grow" type="checkbox"> Aggiungi slide se non entrano</label>
+    <div class="btn-row">
+      <button class="btn wide ghost" id="layout-cancel">Annulla</button>
+      <button class="btn wide primary" id="layout-go">Disponi</button>
+    </div>
   </dialog>
 
   <dialog id="confirm-dialog" class="dialog">
