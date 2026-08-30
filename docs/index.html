@@ -76,8 +76,17 @@ h4:first-of-type{border-top:0;padding-top:0;margin-top:6px}
 .drop b{font-size:12.5px}
 .drop small{color:var(--muted);font-size:10.5px;line-height:1.35}
 
-.check{display:flex;align-items:center;gap:9px;font-size:11.5px;color:var(--muted);margin-top:11px;cursor:pointer;min-height:32px}
-.check input{accent-color:var(--accent);width:16px;height:16px}
+/* phone-style switch: the checkbox stays for keyboard and forms, the track is what you see */
+.check{display:flex;align-items:center;gap:10px;font-size:11.5px;color:var(--muted);margin-top:11px;cursor:pointer;min-height:34px}
+.check input{appearance:none;-webkit-appearance:none;margin:0;flex:0 0 auto;position:relative;
+  width:38px;height:22px;border-radius:22px;background:#33333d;border:1px solid var(--line);
+  cursor:pointer;transition:background .18s,border-color .18s}
+.check input::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;
+  background:#b9b9c2;transition:transform .18s,background .18s}
+.check input:checked{background:var(--accent);border-color:var(--accent)}
+.check input:checked::after{transform:translateX(16px);background:#141400}
+.check input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.check:hover input{border-color:#41414c}
 .field{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-bottom:10px;font-size:11.5px;color:var(--muted);min-height:34px}
 .field input[type=color]{width:38px;height:30px;padding:2px;border:1px solid var(--line);border-radius:7px;background:var(--panel-2)}
 .field select{flex:1;max-width:150px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px;font-size:12px;min-height:36px}
