@@ -296,6 +296,10 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 .help-list{margin:0 0 20px;padding-left:18px;color:var(--muted);font-size:12.5px;line-height:1.6}
 .help-list b{color:var(--text)}
 .help-list li{margin-bottom:9px}
+.dialog h4{margin:16px 0 8px;padding-top:12px;color:var(--accent)}
+.dialog h4:first-of-type{padding-top:0;margin-top:4px;border-top:0}
+.dialog .help-list{margin-bottom:4px}
+#help-dialog{max-height:86vh;overflow-y:auto}
 .choices{display:grid;gap:7px;margin-bottom:14px}
 .choice{display:flex;gap:11px;align-items:flex-start;text-align:left;border:1px solid var(--line);background:var(--panel-2);border-radius:11px;padding:11px;cursor:pointer;min-height:var(--tap)}
 .choice:hover{border-color:#41414c}

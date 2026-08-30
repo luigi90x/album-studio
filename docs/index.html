@@ -304,6 +304,10 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 .help-list{margin:0 0 20px;padding-left:18px;color:var(--muted);font-size:12.5px;line-height:1.6}
 .help-list b{color:var(--text)}
 .help-list li{margin-bottom:9px}
+.dialog h4{margin:16px 0 8px;padding-top:12px;color:var(--accent)}
+.dialog h4:first-of-type{padding-top:0;margin-top:4px;border-top:0}
+.dialog .help-list{margin-bottom:4px}
+#help-dialog{max-height:86vh;overflow-y:auto}
 .choices{display:grid;gap:7px;margin-bottom:14px}
 .choice{display:flex;gap:11px;align-items:flex-start;text-align:left;border:1px solid var(--line);background:var(--panel-2);border-radius:11px;padding:11px;cursor:pointer;min-height:var(--tap)}
 .choice:hover{border-color:#41414c}
@@ -733,19 +737,56 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
     <button data-act="delete" class="danger">Elimina</button>
   </div>
 
-  <dialog id="help-dialog" class="dialog">
+  <dialog id="help-dialog" class="dialog wide-dialog">
     <h2>Come funziona</h2>
+
+    <h4>L'idea</h4>
     <ol class="help-list">
-      <li><b>Striscia unica.</b> Le slide sono affiancate: le linee verticali sono i confini. Ciò che supera un confine finisce su due slide.</li>
-      <li><b>Solo immagini.</b> Non esistono “sfondi”: ci sono immagini, e quella dietro fa da sfondo. I due pulsanti in alto cambiano solo come nasce l'immagine — libera, o già grande quanto la slide e in fondo alla pila.</li>
-      <li><b>Trascina e ridimensiona.</b> Sposti col dito o col mouse, i quadratini allargano, la maniglia ↻ in alto a sinistra ruota. Vicino a un confine la foto si aggancia da sola.</li>
-      <li><b>Riprendere un'immagine.</b> Toccala, oppure usa l'elenco <i>Cosa c'è su questa slide</i>: le elenca dalla cima al fondo, anche quelle coperte.</li>
-      <li><b>Mettere la tua immagine.</b> Doppio tocco su un riquadro (o “Usa una mia immagine qui”): tiene posizione, taglio e cornice.</li>
-      <li><b>Tre ambiti.</b> A destra ciò che riguarda la slide e l'immagine scelta, a sinistra ciò che vale per tutto il carosello.</li>
-      <li><b>Colore e testo.</b> Oltre alle foto puoi inserire un riquadro a tinta unita (anche a tutta slide) e del testo, con carattere, colore e fascia di sfondo. Si spostano e ruotano come le immagini.</li>
-      <li><b>Ripensarci.</b> Ctrl+Z annulla, Ctrl+Shift+Z ripristina, o usa ↶ ↷ in alto. Il lavoro viene salvato da solo: chiudendo e riaprendo lo ritrovi.</li>
-      <li><b>Esporta.</b> Una PNG per slide nel formato scelto, tagliate esattamente sui confini.</li>
+      <li><b>Una striscia sola.</b> Le slide sono affiancate e le linee verticali sono i confini: quello che li supera finisce su due slide, e l'export lo taglia esattamente lì.</li>
+      <li><b>Un solo tipo di elemento.</b> Immagini, riquadri di colore e testi si muovono, ruotano e si sovrappongono allo stesso modo. Non esistono “sfondi”: è sfondo ciò che sta in fondo alla pila.</li>
+      <li><b>Tre ambiti.</b> A sinistra tutto il carosello, a destra la slide e l'elemento scelto. Sul telefono diventano le tre schede sotto la striscia.</li>
     </ol>
+
+    <h4>Gesti</h4>
+    <ol class="help-list">
+      <li><b>Trascina</b> per spostare, i quadratini per ridimensionare, la maniglia ↻ in alto a sinistra per ruotare. Vicino a un bordo o al centro di un altro elemento scatta l'aggancio, con una guida rosa.</li>
+      <li><b>Due tocchi</b> su una foto la sostituiscono con una tua.</li>
+      <li><b>Tieni premuto</b> (o tasto destro) per il menu: sostituisci, duplica, davanti, dietro, riempi, raddrizza, elimina.</li>
+      <li><b>Un tocco</b> su un riquadro tratteggiato vuoto lo riempie subito.</li>
+      <li><b>Trascina i file</b> dal computer direttamente sulla striscia.</li>
+      <li><b>Ctrl+Z</b> annulla, <b>Ctrl+Shift+Z</b> ripristina, <b>Canc</b> elimina. Sul telefono usa ↶ ↷ accanto agli strumenti.</li>
+    </ol>
+
+    <h4>Riempire in fretta</h4>
+    <ol class="help-list">
+      <li><b>Più foto</b> chiede come disporle e mostra uno schema del risultato: riempire i riquadri di un template, una per slide, ricomporre tutto, o solo le slide libere.</li>
+      <li><b>Riquadri vuoti.</b> Se le foto finiscono, i riquadri restano tratteggiati: li riempi quando vuoi e nell'export non compaiono. Con l'interruttore “riempi tutto” vengono invece completati riusando le foto con tagli diversi.</li>
+      <li><b>Sostituisci le foto presenti</b> rialimenta una composizione già fatta lasciando intatti layout, forme e cornici.</li>
+    </ol>
+
+    <h4>Aspetto</h4>
+    <ol class="help-list">
+      <li><b>Forme:</b> rettangolo, cerchio, pillola, arco, foglia, rombo, esagono, stella. Gli angoli si regolano insieme o uno per uno.</li>
+      <li><b>Resa fotografica:</b> tredici effetti (bianco e nero, pellicola, ora d'oro…), più esposizione, contrasto, ombre, saturazione, temperatura, grana e vignettatura.</li>
+      <li><b>Testo</b> con sei caratteri di sistema, grassetto, corsivo, sottolineato, barrato, allineamenti e fascia di sfondo.</li>
+      <li><b>Cornici:</b> bianca, carta, film, scotch, vetro, polaroid. E un velo colorato per immagine.</li>
+    </ol>
+
+    <h4>Organizzare</h4>
+    <ol class="help-list">
+      <li><b>Riordina</b> le slide trascinandole nella striscia in basso, e gli elementi trascinando le righe dell'elenco.</li>
+      <li><b>Formato</b> 4:5, 1:1 o 9:16 per tutto il carosello, cambiabile anche a lavoro finito.</li>
+      <li><b>Template:</b> quelli inclusi, oppure salva la tua composizione come template — tiene le forme, non le foto.</li>
+    </ol>
+
+    <h4>Salvare e pubblicare</h4>
+    <ol class="help-list">
+      <li><b>Si salva da solo</b> mentre lavori: riaprendo ritrovi tutto. “Salva” crea il progetto nella lista, “Nuovo” ricomincia chiedendoti cosa fare di quello aperto.</li>
+      <li><b>Esporta:</b> una immagine per slide da salvare o condividere, oppure la striscia intera in un'unica immagine per controllare i passaggi.</li>
+      <li><b>Backup JSON</b> per portare un progetto altrove o metterlo al sicuro.</li>
+      <li>Tutto resta sul dispositivo: nessun account, nessun upload, funziona anche senza rete.</li>
+    </ol>
+
     <button class="btn primary wide" id="help-close">Ho capito</button>
   </dialog>
 
@@ -1166,7 +1207,7 @@ function buildStrip(host, width, interactive) {
       : (item.src ? `<img src="${item.src}" alt="">` : '');
     node.innerHTML = `<div class="item-box">${inside}<span class="tint"></span></div><span class="tape"></span><span class="outline"></span>`
       // only on the one you picked: on every demo photo at once it covered the pictures
-      + (interactive && item.demo && item.id === selectedItem ? '<span class="demo-tag">esempio · tocca 2 volte</span>' : '')
+      + (interactive && item.demo && item.id === selectedItem ? '<span class="demo-tag">esempio · 2 tocchi o tieni premuto</span>' : '')
       + (interactive
         ? '<span class="span-tag"></span><span class="handle h-rot" data-dir="rot" title="Trascina per ruotare">↻</span>'
           // the top-left corner is the rotation grip, so resizing uses the other seven

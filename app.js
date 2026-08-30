@@ -374,7 +374,7 @@ function buildStrip(host, width, interactive) {
       : (item.src ? `<img src="${item.src}" alt="">` : '');
     node.innerHTML = `<div class="item-box">${inside}<span class="tint"></span></div><span class="tape"></span><span class="outline"></span>`
       // only on the one you picked: on every demo photo at once it covered the pictures
-      + (interactive && item.demo && item.id === selectedItem ? '<span class="demo-tag">esempio · tocca 2 volte</span>' : '')
+      + (interactive && item.demo && item.id === selectedItem ? '<span class="demo-tag">esempio · 2 tocchi o tieni premuto</span>' : '')
       + (interactive
         ? '<span class="span-tag"></span><span class="handle h-rot" data-dir="rot" title="Trascina per ruotare">↻</span>'
           // the top-left corner is the rotation grip, so resizing uses the other seven
