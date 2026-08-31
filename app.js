@@ -727,8 +727,21 @@ function renderPreviewTrack() {
   });
 }
 
+// Signature of everything the thumbnails draw. The image ids are cut down to their tail so a
+// signature stays small even when a photo is inlined as base64.
+const rulerSignature = () => JSON.stringify(project, (key, value) =>
+  key === 'src' || key === 'poster' ? String(value).slice(-24) : value);
+let rulerKey = '';
+
 function renderRuler() {
   const ruler = $('#ruler');
+  const key = `${rulerSignature()}|${slideW.toFixed(0)}`;
+  if (key === rulerKey && ruler.children.length === project.slideCount) {
+    // same pictures as a moment ago: just move the highlight
+    Array.from(ruler.children).forEach((node, index) => node.classList.toggle('active', index === selectedSlide));
+    return;
+  }
+  rulerKey = key;
   const keepScroll = ruler.scrollLeft;   // rebuilding the strip must not scroll it back to slide 01
   ruler.innerHTML = '';
   const thumbW = 42;
@@ -2183,12 +2196,24 @@ async function renderProjects() {
     ? 'Aperto come file locale: lo spazio di salvataggio è limitato. Per progetti pesanti scarica il backup JSON da “Esporta”.'
     : '';
   if (!saved.length) { grid.innerHTML = '<div class="empty-projects">Nessun album salvato.<br>Componi la striscia e premi “Salva”.</div>'; return; }
+  // A saved project stores media ids, not pictures: the cover has to be fetched from the store,
+  // which is why putting the id straight into src showed a broken image.
+  const coverOf = p => [...(p.items || [])].sort((a, b) => a.x - b.x).find(i => i.src || i.poster);
   grid.innerHTML = saved.map(p => {
-    const cover = p.items?.[0]?.src || '';
-    return `<article class="project-card"><div class="project-art">${cover ? `<img src="${cover}" alt="">` : ''}<strong>${p.title || 'Album'}</strong></div>
-      <footer><span>${p.slides?.length || 0} slide · ${new Date(p.updated).toLocaleDateString('it-IT')}</span>
+    const cover = coverOf(p);
+    const slides = p.slideCount || p.slides?.length || 0;
+    return `<article class="project-card"><div class="project-art">${cover ? `<img data-cover="${p.id}" alt="">` : ''}<strong>${p.title || 'Album'}</strong></div>
+      <footer><span>${slides} slide · ${new Date(p.updated).toLocaleDateString('it-IT')}</span>
       <span><button data-open="${p.id}">Apri</button><button class="del" data-del="${p.id}" title="Elimina il progetto">Elimina</button></span></footer></article>`;
   }).join('');
+  for (const p of saved) {
+    const cover = coverOf(p);
+    const img = cover && $(`img[data-cover="${p.id}"]`);
+    if (!img) continue;
+    await primeMedia([cover]);
+    const url = srcOf({ src: cover.poster }) || srcOf(cover);
+    if (url) img.src = url; else img.remove();
+  }
   $$('[data-open]').forEach(b => b.onclick = async () => {
     busy('Apro il progetto…');
     project = await absorbMedia(normalize(saved.find(p => p.id === b.dataset.open)));
@@ -2789,8 +2814,20 @@ function bindRange(id, key, format) {
     item[key] = +input.value;
     const out = $(`${id}-value`);
     if (out) out.value = format ? format(input.value) : input.value;
-    render();
+    restyleSelected();
   };
+  input.onchange = () => { if (selected()) render(); };
+}
+
+// Repaints just the element you are editing. A full render rebuilds the strip, the slide
+// thumbnails and both panels: at thirty slider events a second that is what made it stutter.
+function restyleSelected() {
+  const item = selected();
+  if (!item) return;
+  const node = $(`#strip .item[data-id="${item.id}"]`);
+  if (!node) { render(); return; }
+  styleItem(node, item, slideW);       // this covers text nodes too
+  scheduleAutosave();
 }
 
 function init() {
@@ -2834,7 +2871,8 @@ function init() {
   $('#auto-files').onchange = e => { autoLayout(e.target.files); e.target.value = ''; };
   $('#add-text').onclick = addTextItem;
 
-  $('#item-text').oninput = e => { const i = selected(); if (i) { i.text = e.target.value; render(); } };
+  $('#item-text').oninput = e => { const i = selected(); if (i) { i.text = e.target.value; restyleSelected(); } };
+  $('#item-text').onchange = () => { if (selected()) render(); };
   // typing is one undo step per burst: a checkpoint before the first keystroke, not before each
   let lastTextUndo = 0;
   $('#item-text').addEventListener('beforeinput', () => {
@@ -2842,10 +2880,12 @@ function init() {
     lastTextUndo = Date.now();
   });
   $('#item-font').onchange = e => { const i = selected(); if (i) { pushUndo(); i.font = e.target.value; render(); } };
-  $('#item-text-color').oninput = e => { const i = selected(); if (i) { i.color = e.target.value; render(); } };
-  $('#item-size').oninput = e => { const i = selected(); if (i) { i.size = +e.target.value; $('#item-size-value').value = i.size; render(); } };
-  $('#item-text-bg').oninput = e => { const i = selected(); if (i) { i.fill = e.target.value; render(); } };
-  $('#item-text-bg-opacity').oninput = e => { const i = selected(); if (i) { i.fillOpacity = +e.target.value; $('#item-text-bg-opacity-value').value = i.fillOpacity; render(); } };
+  $('#item-text-color').oninput = e => { const i = selected(); if (i) { i.color = e.target.value; restyleSelected(); } };
+  $('#item-size').oninput = e => { const i = selected(); if (i) { i.size = +e.target.value; $('#item-size-value').value = i.size; restyleSelected(); } };
+  $('#item-size').onchange = () => { if (selected()) render(); };
+  $('#item-text-bg').oninput = e => { const i = selected(); if (i) { i.fill = e.target.value; restyleSelected(); } };
+  $('#item-text-bg-opacity').oninput = e => { const i = selected(); if (i) { i.fillOpacity = +e.target.value; $('#item-text-bg-opacity-value').value = i.fillOpacity; restyleSelected(); } };
+  $('#item-text-bg-opacity').onchange = () => { if (selected()) render(); };
   $$('[data-style]').forEach(b => b.onclick = () => {
     const i = selected();
     if (!i) return;
@@ -2869,7 +2909,7 @@ function init() {
     Object.assign(i, TEXT_PRESETS[b.dataset.preset]);
     render();
   });
-  $('#item-fill-color').oninput = e => { const i = selected(); if (i) { i.fill = e.target.value; render(); } };
+  $('#item-fill-color').oninput = e => { const i = selected(); if (i) { i.fill = e.target.value; restyleSelected(); } };
 
   $('#more-slides').onclick = () => changeSlideCount(1);
   $('#less-slides').onclick = () => changeSlideCount(-1);
@@ -2888,8 +2928,9 @@ function init() {
       toast('Slide svuotata');
     });
   };
-  $('#item-tint-color').oninput = e => { const i = selected(); if (i) { i.tintColor = e.target.value; render(); } };
-  $('#item-tint').oninput = e => { const i = selected(); if (i) { i.tintOpacity = +e.target.value; $('#item-tint-value').value = i.tintOpacity; render(); } };
+  $('#item-tint-color').oninput = e => { const i = selected(); if (i) { i.tintColor = e.target.value; restyleSelected(); } };
+  $('#item-tint').oninput = e => { const i = selected(); if (i) { i.tintOpacity = +e.target.value; $('#item-tint-value').value = i.tintOpacity; restyleSelected(); } };
+  $('#item-tint').onchange = () => { if (selected()) render(); };
 
   $$('[data-recipe]').forEach(b => b.onclick = () => applyRecipe(b.dataset.recipe));
   $('#span-recipe').onclick = addSpanningPhoto;
@@ -2923,8 +2964,9 @@ function init() {
       const i = selected();
       if (!i || !Array.isArray(i.corners)) return;
       i.corners[index] = +e.target.value;
-      render();
+      restyleSelected();
     };
+    $(`#corner-${corner}`).onchange = () => { if (selected()) render(); };
   });
   $('#item-look').onchange = () => { const i = selected(); if (i) { pushUndo(); i.look = $('#item-look').value; render(); } };
   bindRange('#item-grain', 'grain');
