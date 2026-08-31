@@ -1695,7 +1695,6 @@ function showClip(item) {
   player.style.objectPosition = `${item.panX}% ${item.panY}%`;
   player.style.transform = `scale(${(item.zoom || 100) / 100})`;
   player.style.transformOrigin = `${item.panX}% ${item.panY}%`;
-  stage.style.aspectRatio = `${Math.max(0.05, item.w) * OUT_W} / ${Math.max(0.05, item.h) * OUT_H}`;
   $('.clip-tint', stage).style.background = overlayCSS(item);
   stage.classList.toggle('grainy', Boolean(item.grain));
   stage.style.setProperty('--grain', (item.grain || 0) / 100);
