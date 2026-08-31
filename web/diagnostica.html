@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#0f0f10" />
+<title>Album Studio — diagnostica del dispositivo</title>
+<style>
+  :root{color-scheme:dark;font-family:'Segoe UI',system-ui,-apple-system,Arial,sans-serif}
+  body{margin:0;background:#0f0f10;color:#ececef;font-size:14px;padding:16px calc(16px + env(safe-area-inset-right)) 40px calc(16px + env(safe-area-inset-left));padding-top:calc(16px + env(safe-area-inset-top))}
+  h1{font-size:17px;margin:0 0 4px}
+  p.lead{color:#8b8b95;font-size:12.5px;line-height:1.5;margin:0 0 16px}
+  .row{display:flex;gap:10px;align-items:flex-start;padding:9px 0;border-bottom:1px solid #2a2a30}
+  .mark{flex:0 0 auto;width:20px;text-align:center;font-size:14px}
+  .ok{color:#9ede3a} .no{color:#ff6b5e} .warn{color:#ffc46b} .wait{color:#8b8b95}
+  .what{flex:1;min-width:0}
+  .what b{display:block;font-size:13px;font-weight:600}
+  .what small{display:block;color:#8b8b95;font-size:11.5px;line-height:1.45;word-break:break-word}
+  h2{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#8b8b95;margin:22px 0 2px}
+  button{font:inherit;color:inherit;background:#1e1e22;border:1px solid #2a2a30;border-radius:9px;padding:12px 14px;min-height:44px;width:100%;margin-top:14px;cursor:pointer}
+  button.primary{background:#d9ff4b;border-color:#d9ff4b;color:#141400;font-weight:600}
+  #verdict{margin:16px 0 0;padding:13px;border:1px solid #2a2a30;border-radius:11px;background:#17171a;font-size:13px;line-height:1.5}
+  textarea{width:100%;height:150px;background:#101012;color:#ececef;border:1px solid #2a2a30;border-radius:9px;padding:10px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;margin-top:10px}
+  video{width:100%;border-radius:9px;background:#000;margin-top:10px;display:block}
+  video[hidden]{display:none}   /* display:block would otherwise beat the attribute */
+</style>
+</head>
+<body>
+<h1>Diagnostica del dispositivo</h1>
+<p class="lead">Serve a sapere cosa questo telefono sa fare davvero, soprattutto per l’esportazione dei video. Dura una decina di secondi. Niente lascia il dispositivo.</p>
+
+<div id="list"></div>
+<div id="verdict">In corso…</div>
+<video id="proof" controls playsinline hidden></video>
+<button class="primary" id="copy">Copia il risultato</button>
+<textarea id="raw" readonly></textarea>
+
+<script>
+const list = document.getElementById('list');
+const lines = [];
+const wait = ms => new Promise(r => setTimeout(r, ms));
+// No step may hang the page: a browser that never answers is itself a result.
+const limit = (promise, ms, fallback) => Promise.race([
+  Promise.resolve(promise).catch(() => fallback),
+  new Promise(r => setTimeout(() => r(fallback), ms))
+]);
+
+function group(title) {
+  const h = document.createElement('h2');
+  h.textContent = title;
+  list.append(h);
+  lines.push('', `== ${title} ==`);
+}
+
+function row(name, state, detail = '') {
+  const el = document.createElement('div');
+  el.className = 'row';
+  const marks = { ok: ['✓', 'ok'], no: ['✕', 'no'], warn: ['!', 'warn'], wait: ['…', 'wait'] };
+  const [glyph, klass] = marks[state] || marks.wait;
+  el.innerHTML = `<span class="mark ${klass}">${glyph}</span><span class="what"><b></b><small></small></span>`;
+  el.querySelector('b').textContent = name;
+  el.querySelector('small').textContent = detail;
+  list.append(el);
+  lines.push(`${glyph} ${name}${detail ? ' — ' + detail : ''}`);
+  return {
+    set(state, detail) {
+      const [g, k] = marks[state] || marks.wait;
+      const mark = el.querySelector('.mark');
+      mark.textContent = g;
+      mark.className = `mark ${k}`;
+      el.querySelector('small').textContent = detail || '';
+      const at = lines.lastIndexOf(`${glyph} ${name}`) >= 0 ? lines.lastIndexOf(`${glyph} ${name}`) : -1;
+      const index = lines.findIndex(l => l.endsWith(name) || l.startsWith(`${glyph} ${name}`));
+      if (index >= 0) lines[index] = `${g} ${name}${detail ? ' — ' + detail : ''}`;
+    }
+  };
+}
+
+// A canvas that changes every frame, the same shape a slide is exported in.
+function painter(w, h) {
+  const canvas = document.createElement('canvas');
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  let n = 0;
+  return {
+    canvas,
+    paint() {
+      n++;
+      ctx.fillStyle = `hsl(${(n * 7) % 360} 70% 45%)`;
+      ctx.fillRect(0, 0, w, h);
+      ctx.fillStyle = '#fff';
+      ctx.font = `${Math.round(h / 9)}px sans-serif`;
+      ctx.fillText(String(n), w / 12, h / 2);
+    }
+  };
+}
+
+const results = {};
+
+async function run() {
+  group('Dispositivo');
+  const ua = navigator.userAgent;
+  const iOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const version = (ua.match(/OS (\d+)[._](\d+)/) || [])[0] || 'non dichiarata';
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  results.iOS = iOS;
+  row('Sistema', 'ok', `${iOS ? 'iPhone o iPad' : 'non iOS'} · ${version} · ${standalone ? 'aperta come app' : 'aperta nel browser'}`);
+  row('Identificativo', 'ok', ua);
+
+  group('Archiviazione');
+  const dbOK = await new Promise(resolve => {
+    try {
+      const request = indexedDB.open('diagnostica-prova', 1);
+      request.onsuccess = () => { request.result.close(); indexedDB.deleteDatabase('diagnostica-prova'); resolve(true); };
+      request.onerror = () => resolve(false);
+      setTimeout(() => resolve(false), 4000);
+    } catch { resolve(false); }
+  });
+  row('Magazzino delle foto (IndexedDB)', dbOK ? 'ok' : 'no', dbOK ? 'disponibile' : 'non disponibile: i progetti starebbero stretti');
+  const persisted = navigator.storage?.persist ? await limit(navigator.storage.persist(), 5000, false) : false;
+  results.persisted = persisted;
+  row('Spazio protetto dalla pulizia', persisted ? 'ok' : 'warn',
+      persisted ? 'concesso: i progetti restano anche se non apri l’app per settimane'
+                : 'non concesso: il sistema può cancellare i dati dopo un periodo di inattività — installa l’app nella schermata Home e riprova');
+  const est = navigator.storage?.estimate ? await limit(navigator.storage.estimate(), 5000, null) : null;
+  row('Spazio a disposizione', est ? 'ok' : 'warn',
+      est ? `${Math.round(est.quota / 1048576)} MB totali, ${Math.round((est.usage || 0) / 1048576)} MB usati` : 'non dichiarato');
+
+  group('Consegna dei file');
+  const probe = new File([new Blob(['{}'], { type: 'application/json' })], 'prova.json', { type: 'application/json' });
+  const canShareFiles = Boolean(navigator.canShare && navigator.canShare({ files: [probe] }));
+  const movie = new File([new Blob([new Uint8Array(8)], { type: 'video/mp4' })], 'p.mp4', { type: 'video/mp4' });
+  const canShareMovie = Boolean(navigator.canShare && navigator.canShare({ files: [movie] }));
+  results.share = canShareFiles;
+  row('Foglio di condivisione per i file', canShareFiles ? 'ok' : 'warn',
+      canShareFiles ? `disponibile${canShareMovie ? ', video compresi' : ', ma non per i video'}` : 'assente: si userà il download del browser');
+  row('Download del browser', typeof document.createElement('a').download === 'string' ? 'ok' : 'warn',
+      'usato come ripiego quando manca la condivisione');
+
+  group('Immagini');
+  const painterSmall = painter(1080, 1350);
+  painterSmall.paint();
+  const t0 = performance.now();
+  const blob = await limit(new Promise(r => painterSmall.canvas.toBlob(r, 'image/png')), 15000, null);
+  results.png = Boolean(blob);
+  row('Esportazione PNG di una slide', blob ? 'ok' : 'no',
+      blob ? `${Math.round(blob.size / 1024)} KB in ${Math.round(performance.now() - t0)} ms a 1080×1350` : 'non riuscita');
+
+  // how fast this device can draw a slide: the export needs one draw per frame
+  const drawer = painter(1080, 1350);
+  const t1 = performance.now();
+  for (let i = 0; i < 30; i++) drawer.paint();
+  const perFrame = (performance.now() - t1) / 30;
+  results.perFrame = perFrame;
+  row('Velocità di disegno', perFrame < 20 ? 'ok' : perFrame < 42 ? 'warn' : 'no',
+      `${perFrame.toFixed(1)} ms per fotogramma — ${perFrame < 20 ? 'basta per 24 fotogrammi al secondo con margine' : perFrame < 42 ? 'appena sufficiente per 24 al secondo' : 'troppo lenta: l’export uscirebbe a scatti'}`);
+
+  group('Video');
+  const hasRecorder = typeof MediaRecorder !== 'undefined';
+  const wanted = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm'];
+  const supported = hasRecorder ? wanted.filter(t => MediaRecorder.isTypeSupported(t)) : [];
+  results.codec = supported[0] || null;
+  row('Registratore video', hasRecorder ? (supported.length ? 'ok' : 'no') : 'no',
+      hasRecorder ? (supported.length ? `formati: ${supported.join(' · ')}` : 'presente ma nessun formato utilizzabile') : 'assente: nessuna esportazione video');
+  const mp4 = supported.some(t => t.startsWith('video/mp4'));
+  results.mp4 = mp4;
+  row('Formato MP4 (quello che vuole Instagram)', mp4 ? 'ok' : supported.length ? 'warn' : 'no',
+      mp4 ? 'disponibile' : supported.length ? `solo ${supported[0]}: andrebbe convertito prima di pubblicarlo` : 'non disponibile');
+
+  const canvasStream = typeof HTMLCanvasElement.prototype.captureStream === 'function';
+  row('Ripresa della tela (captureStream)', canvasStream ? 'ok' : 'no',
+      canvasStream ? 'disponibile' : 'assente: la slide non può diventare un filmato');
+  let manualFrames = false;
+  if (canvasStream) {
+    try { manualFrames = typeof painterSmall.canvas.captureStream(0).getVideoTracks()[0].requestFrame === 'function'; } catch {}
+  }
+  results.manualFrames = manualFrames;
+  row('Fotogrammi a comando (requestFrame)', manualFrames ? 'ok' : 'warn',
+      manualFrames ? 'disponibile: l’export resta a passo costante' : 'assente: l’export può risultare meno regolare');
+
+  // the real thing: record two seconds and play it back
+  const proof = document.getElementById('proof');
+  const recRow = row('Prova di registrazione (2 secondi)', 'wait', 'in corso…');
+  if (!hasRecorder || !supported.length || !canvasStream) {
+    recRow.set('no', 'saltata: manca il necessario');
+    results.recorded = false;
+  } else {
+    try {
+      const type = supported[0];
+      const p = painter(1080, 1350);
+      const stream = p.canvas.captureStream(manualFrames ? 0 : 24);
+      const track = stream.getVideoTracks()[0];
+      const rec = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 6_000_000 });
+      const parts = [];
+      rec.ondataavailable = e => e.data.size && parts.push(e.data);
+      const started = performance.now();
+      rec.start();
+      let frames = 0;
+      await new Promise(done => {
+        const timer = setInterval(() => {
+          p.paint();
+          if (manualFrames) track.requestFrame?.();
+          frames++;
+          if (performance.now() - started >= 2000) { clearInterval(timer); done(); }
+        }, 1000 / 24);
+      });
+      await new Promise(r => { rec.onstop = r; rec.stop(); });
+      const film = new Blob(parts, { type });
+      results.recorded = film.size > 0;
+      results.filmSize = film.size;
+      if (!film.size) throw new Error('il registratore non ha prodotto dati');
+      proof.src = URL.createObjectURL(film);
+      proof.hidden = false;                     // only worth showing when there is something in it
+      const meta = await new Promise(r => {
+        proof.onloadedmetadata = () => r({ d: proof.duration, w: proof.videoWidth, h: proof.videoHeight });
+        proof.onerror = () => r(null);
+        setTimeout(() => r(null), 6000);
+      });
+      results.playable = Boolean(meta);
+      results.fps = frames / 2;
+      recRow.set(film.size && meta ? 'ok' : film.size ? 'warn' : 'no',
+        film.size
+          ? `${Math.round(film.size / 1024)} KB · ${frames} fotogrammi disegnati (${(frames / 2).toFixed(0)} al secondo) · ${meta ? `si riapre: ${meta.w}×${meta.h}, ${meta.d.toFixed(1)}s` : 'il file non si riapre qui'}`
+          : 'nessun dato registrato');
+    } catch (error) {
+      results.recorded = false;
+      recRow.set('no', `non riuscita: ${error.message || error}`);
+    }
+  }
+
+  group('Lettura dei video importati');
+  const decodeRow = row('Estrazione di un fotogramma', 'wait', 'in corso…');
+  try {
+    if (!results.recorded) throw new Error('serve la registrazione, che non è riuscita');
+    const film = new Blob([], { type: 'video/mp4' });
+    const v = document.createElement('video');
+    v.muted = true; v.playsInline = true; v.preload = 'auto';
+    v.src = proof.src;
+    await new Promise((res, rej) => { v.onloadeddata = res; v.onerror = rej; setTimeout(rej, 8000); });
+    const t2 = performance.now();
+    await new Promise(res => { v.onseeked = res; v.currentTime = 1; setTimeout(res, 4000); });
+    const c = document.createElement('canvas');
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    c.getContext('2d').drawImage(v, 0, 0);
+    const data = c.getContext('2d').getImageData(0, 0, Math.min(20, c.width), Math.min(20, c.height)).data;
+    let sum = 0;
+    for (let i = 0; i < data.length; i += 4) sum += data[i] + data[i + 1] + data[i + 2];
+    const black = sum === 0;
+    results.decode = !black;
+    decodeRow.set(black ? 'no' : 'ok', black
+      ? 'il fotogramma esce nero: le miniature dei video non funzionerebbero'
+      : `letto in ${Math.round(performance.now() - t2)} ms, con immagine`);
+  } catch (error) {
+    results.decode = false;
+    decodeRow.set('warn', `non verificata: ${error.message || error}`);
+  }
+
+  verdict();
+  document.getElementById('raw').value = lines.join('\n');
+}
+
+function verdict() {
+  const box = document.getElementById('verdict');
+  const say = [];
+  if (results.recorded && results.mp4 && results.playable) {
+    say.push('<b>Video: sì.</b> Questo dispositivo esporta le slide con video in MP4.');
+  } else if (results.recorded && results.playable) {
+    say.push('<b>Video: a metà.</b> Registra, ma non in MP4: il file andrebbe convertito prima di pubblicarlo.');
+  } else {
+    say.push('<b>Video: no.</b> Su questo dispositivo l’esportazione dei filmati non funziona; le foto sì.');
+  }
+  if (results.perFrame > 42) say.push('Il disegno è lento: anche dove il video funziona, uscirebbe a scatti.');
+  else if (results.perFrame > 20) say.push('Il disegno è al limite: tieni 24 fotogrammi al secondo.');
+  if (!results.decode) say.push('I fotogrammi dei video importati non si leggono: niente copertine né anteprime di taglio.');
+  if (!results.persisted) say.push('Lo spazio non è protetto: installa l’app nella schermata Home, poi riapri questa pagina.');
+  if (!results.share) say.push('Manca il foglio di condivisione: i file usciranno con il download del browser.');
+  box.innerHTML = say.join('<br>');
+}
+
+document.getElementById('copy').onclick = async () => {
+  const text = document.getElementById('raw').value;
+  try { await navigator.clipboard.writeText(text); document.getElementById('copy').textContent = 'Copiato'; }
+  catch { document.getElementById('raw').select(); }
+};
+
+run().catch(error => { document.getElementById('verdict').textContent = 'La diagnostica si è interrotta: ' + (error.message || error); });
+</script>
+</body>
+</html>
