@@ -12,9 +12,9 @@
     <header class="topbar">
       <div class="brand"><span class="brand-mark">A</span><span class="brand-name">ALBUM STUDIO</span></div>
       <nav class="tabs">
-        <button class="tab active" data-panel="editor">Striscia</button>
-        <button class="tab" data-panel="layouts">Template</button>
-        <button class="tab" data-panel="projects">Progetti</button>
+        <button class="tab active" data-panel="editor" title="Compone il carosello su cui stai lavorando"><span class="tab-ico">▤▤</span><span class="tab-text">Composizione</span></button>
+        <button class="tab" data-panel="layouts" title="Schemi pronti da applicare e riempire con le tue foto"><span class="tab-ico">✦</span><span class="tab-text">Schemi pronti</span></button>
+        <button class="tab" data-panel="projects" title="I caroselli che hai salvato su questo dispositivo"><span class="tab-ico">🖿</span><span class="tab-text">Salvati</span></button>
       </nav>
       <div class="top-actions">
         <button class="btn icon" id="help-open" title="Come funziona">?</button>
@@ -57,6 +57,7 @@
           </div>
           <div id="stage" class="stage">
             <div id="busy" class="busy hidden" role="status"><span class="spinner"></span><span id="busy-text">Carico…</span></div>
+            <button id="add-slide-here" class="add-slide" title="Aggiungi una slide in fondo al carosello">＋<small>slide</small></button>
             <div id="strip-scroll" class="strip-scroll"><div id="strip" class="strip"></div></div>
             <div id="preview-track" class="preview-track hidden"></div>
           </div>
@@ -66,14 +67,15 @@
               <button id="mode-preview" class="seg" title="Come appare scorrendo il carosello">Anteprima</button>
             </div>
             <div class="history">
-              <button id="undo" title="Annulla (Ctrl+Z)">↶</button>
-              <button id="redo" title="Ripristina (Ctrl+Shift+Z)">↷</button>
+              <button id="undo" title="Annulla l'ultima modifica (Ctrl+Z)"><span class="ico">↶</span><span class="lbl">Annulla</span></button>
+              <button id="redo" title="Rifai la modifica annullata (Ctrl+Shift+Z)"><span class="ico">↷</span><span class="lbl">Rifai</span></button>
             </div>
             <div class="zoomer">
-              <button id="zoom-out" title="Riduci">−</button>
-              <output id="zoom-value">100%</output>
-              <button id="zoom-in" title="Ingrandisci">+</button>
-              <button id="zoom-fit" title="Adatta allo schermo">Adatta</button>
+              <span class="zoom-lens" aria-hidden="true">⌕</span>
+              <button id="zoom-out" title="Rimpicciolisci la vista">−</button>
+              <output id="zoom-value" title="Ingrandimento della vista">100%</output>
+              <button id="zoom-in" title="Ingrandisci la vista">+</button>
+              <button id="zoom-fit" title="Riporta la vista alla dimensione che entra nello schermo"><span class="ico">⤢</span><span class="lbl">Adatta</span></button>
             </div>
           </div>
           <div class="ruler-wrap"><div id="ruler" class="ruler"></div></div>
@@ -106,12 +108,27 @@
 
               <div id="video-controls" class="hidden">
                 <p class="note" id="video-note"></p>
+                <div class="clip-ends">
+                  <figure><img id="video-thumb-start" alt=""><figcaption>inizio <b id="video-at-start">0s</b></figcaption></figure>
+                  <figure><img id="video-thumb-end" alt=""><figcaption>fine <b id="video-at-end">0s</b></figcaption></figure>
+                </div>
+                <button class="btn wide" id="video-play">▶ Riproduci questo tratto</button>
                 <label class="range-label">Inizia da <output id="video-start-value">0s</output></label>
                 <input id="video-start" type="range" min="0" max="100" step="0.1" value="0" title="Da quale punto del video parte la slide">
                 <label class="range-label">Durata <output id="video-clip-value">0s</output></label>
                 <input id="video-clip" type="range" min="1" max="30" step="0.5" value="30" title="Massimo 30 secondi per slide">
                 <label class="check"><input id="video-audio" type="checkbox" checked> <span id="video-audio-label">Includi l'audio</span></label>
-                <button class="btn wide" id="video-cover">Usa questo istante come copertina</button>
+                <button class="btn wide" id="video-cover">Usa il fotogramma iniziale come copertina</button>
+                <h4>Esportazione</h4>
+                <div class="field"><span>Fotogrammi al secondo</span>
+                  <select id="video-fps" title="Più fotogrammi significa movimento più fluido, ma il disegno deve stare al passo">
+                    <option value="24">24 — consigliato</option>
+                    <option value="30">30</option>
+                    <option value="48">48</option>
+                    <option value="60">60 — solo se il dispositivo è veloce</option>
+                  </select>
+                </div>
+                <p class="note" id="fps-note">A 24 il disegno ha tempo di stare al passo. Salendo, se il dispositivo non ce la fa, l'export può risultare a scatti.</p>
               </div>
 
               <div id="text-controls" class="hidden">

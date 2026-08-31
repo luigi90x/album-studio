@@ -15,7 +15,7 @@ const MIN_SLIDES = 1, MAX_SLIDES = 12;
 const MIN_W = 0.08, MIN_H = 0.05;   // smallest item, in slide units
 const MAX_PHOTO_SIDE = 1800;         // imported photos are downscaled to this
 const MAX_CLIP = 30;                 // seconds of video that end up in the export
-const CLIP_FPS = 24;                 // frames per second when recording a slide
+const CLIP_FPS = 24;                 // default frames per second when recording a slide
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -46,6 +46,7 @@ const newProject = () => ({
 let project = newProject();
 let selectedSlide = 0;
 let selectedItem = null;
+let playingVideo = null;    // at most one clip runs, and only because you asked for it
 let slideW = 260;
 let mode = 'edit';
 let showGuides = true;
@@ -519,6 +520,7 @@ async function importVideo(file) {
     clip: Math.min(MAX_CLIP, info.duration || MAX_CLIP),
     audio: info.hasAudio,
     hasAudio: info.hasAudio,
+    fps: CLIP_FPS,
     videoWidth: info.width,
     videoHeight: info.height
   };
@@ -562,6 +564,9 @@ function buildStrip(host, width, interactive) {
   host.style.height = `${width * OUT_H / OUT_W}px`;
   host.style.background = project.bgColor;
   host.classList.toggle('guides', showGuides && interactive);
+  // stop and unhook the old clips first: dropping a playing <video> on the floor leaves its decoder
+  // running, and a slider drag redraws many times a second
+  host.querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); });
   host.innerHTML = '';
 
   // Layer order matters for hit testing: the click-catcher for empty space sits *below* the images,
@@ -613,9 +618,9 @@ function buildStrip(host, width, interactive) {
     node.dataset.id = item.id;
     const inside = kind === 'text' ? '<div class="item-text"></div>'
       : kind === 'empty' ? '<div class="item-empty">＋</div>'
-      : kind === 'video' ? (interactive
-          ? `<img src="${posterOf(item)}" alt=""><span class="video-mark">▶ ${formatClip(item)}</span>`
-          : `<video src="${srcOf(item)}" muted playsinline loop autoplay poster="${posterOf(item)}"></video>`)
+      : kind === 'video' ? (interactive && playingVideo === item.id
+          ? `<video src="${srcOf(item)}" muted playsinline></video><span class="video-mark playing">❚❚ ferma</span>`
+          : `<img src="${posterOf(item)}" alt="">` + (interactive ? `<span class="video-mark">▶ ${formatClip(item)}</span>` : ''))
       : (item.src ? `<img src="${srcOf(item)}" alt="">` : '');
     node.innerHTML = `<div class="item-box">${inside}<span class="tint"></span></div><span class="tape"></span><span class="outline"></span>`
       // only on the one you picked: on every demo photo at once it covered the pictures
@@ -630,8 +635,29 @@ function buildStrip(host, width, interactive) {
     if (interactive) {
       $('.span-tag', node).textContent = `↔ ${spanOf(item)} slide`;
       setupItemPointer(node, item, width);
+      if (kind === 'video') setupClip(node, item);
     }
   });
+}
+
+// The badge doubles as play/pause. Nothing autoplays: a strip full of looping videos is what
+// jammed the workspace, and a redraw used to spawn a fresh decoder for every one of them.
+function setupClip(node, item) {
+  const badge = $('.video-mark', node);
+  if (badge) badge.onpointerdown = e => {
+    e.stopPropagation();
+    playingVideo = playingVideo === item.id ? null : item.id;
+    render();
+  };
+  const video = $('video', node);
+  if (!video) return;
+  const from = item.start || 0;
+  const to = from + clipSeconds(item);
+  // seeking before the metadata land is silently dropped, and the clip would start from zero
+  const seek = () => { video.currentTime = from; };
+  if (video.readyState >= 1) seek(); else video.onloadedmetadata = seek;
+  video.ontimeupdate = () => { if (video.currentTime >= to || video.currentTime < from - 0.1) video.currentTime = from; };
+  video.play().catch(() => { playingVideo = null; });
 }
 
 function styleItem(node, item, width) {
@@ -698,11 +724,14 @@ function styleItem(node, item, width) {
 function renderStrip() {
   const strip = $('#strip');
   buildStrip(strip, slideW, true);
+  // the invite hangs on the stage, not on the strip: centred on a strip several slides wide it
+  // ended up off screen
+  $('.strip-empty')?.remove();
   if (!project.items.length) {
     const hint = document.createElement('div');
     hint.className = 'strip-empty';
     hint.innerHTML = '<b>Aggiungi la prima immagine</b><small>Trascinala dove vuoi: può coprire quante slide vuoi.</small>';
-    strip.append(hint);
+    $('#stage').append(hint);
   }
 }
 
@@ -774,9 +803,12 @@ function renderLayers() {
     const depth = position === 0 ? 'in cima' : position === touching.length - 1 ? 'in fondo' : `livello ${touching.length - position}`;
     const kind = itemKind(item);
     const thumb = kind === 'image' ? `background-image:url('${srcOf(item)}')`
+      : kind === 'video' ? `background-image:url('${posterOf(item)}')`
       : kind === 'text' ? `background:${item.color || '#fff'};color:${item.fill || '#111'}`
       : `background:${item.fill || '#888'}`;
     const what = kind === 'image' ? 'Immagine'
+      : kind === 'video' ? `Video ${formatClip(item)}`
+      : kind === 'empty' ? 'Riquadro vuoto'
       : kind === 'text' ? `“${(item.text || '').split('\n')[0].slice(0, 18) || 'Testo'}”`
       : 'Colore';
     return `<div class="layer-row ${item.id === selectedItem ? 'active' : ''}">
@@ -849,6 +881,9 @@ function renderInspector() {
   $('#show-guides').checked = showGuides;
   $('#zoom-value').value = `${Math.round(slideW / 3.2)}%`;
   $('#less-slides').disabled = project.slideCount <= MIN_SLIDES;
+  $('#add-slide-here').disabled = project.slideCount >= MAX_SLIDES;
+  $('#undo').disabled = !undoStack.length;
+  $('#redo').disabled = !redoStack.length;
   $('#more-slides').disabled = project.slideCount >= MAX_SLIDES;
   $('#move-left').disabled = selectedSlide === 0;
   $('#move-right').disabled = selectedSlide === project.slideCount - 1;
@@ -880,6 +915,11 @@ function renderInspector() {
     $('#video-audio').checked = Boolean(item.audio && item.hasAudio);
     $('#video-audio').disabled = !item.hasAudio;
     $('#video-audio-label').textContent = item.hasAudio ? 'Includi l’audio' : 'Questo video non ha audio';
+    $('#video-fps').value = String(item.fps || CLIP_FPS);
+    $('#video-at-start').textContent = `${(item.start || 0).toFixed(1)}s`;
+    $('#video-at-end').textContent = `${((item.start || 0) + Math.min(item.clip ?? room, room)).toFixed(1)}s`;
+    $('#video-play').textContent = playingVideo === item.id ? '❚❚ Ferma' : '▶ Riproduci questo tratto';
+    refreshClipThumbs(item);
     $('#video-note').textContent = duration > MAX_CLIP
       ? `Il video dura ${Math.round(duration)}s: nell'export entra la finestra scelta qui, al massimo ${MAX_CLIP}s.`
       : `Video di ${duration.toFixed(1)}s. Nell'export la slide diventa un filmato con sopra tutto il resto.`;
@@ -976,6 +1016,9 @@ function render() {
   primeMedia().then(missing => { if (missing) render(); });
   selectedSlide = clamp(selectedSlide, 0, project.slideCount - 1);
   if (selectedItem && !itemById(selectedItem)) selectedItem = null;
+  // a clip plays only while its own item is the selected one: this single line stops it when you
+  // pick something else, close the panel, or delete the video
+  if (playingVideo && playingVideo !== selectedItem) playingVideo = null;
   // expand the photo panel once, when the selection actually changes — never on every render
   if (selectedItem && selectedItem !== shownItem) {
     $('#sec-item').open = true;
@@ -1551,6 +1594,39 @@ function addTextItem() {
   render();
   $('#item-text').select();
   toast('Testo inserito: scrivilo nel pannello a destra');
+}
+
+// The two ends of the chosen window, as pictures. Reading a frame means seeking a video, so the
+// results are cached and only re-read when the position actually changes.
+const clipThumbs = new Map();
+
+async function frameURL(item, at) {
+  const key = `${item.id}@${at.toFixed(2)}`;
+  if (clipThumbs.has(key)) return clipThumbs.get(key);
+  const blob = await grabFrame(item, at);
+  if (!blob) return '';
+  const url = URL.createObjectURL(blob);
+  if (clipThumbs.size > 40) {                     // keep the cache small
+    const [oldest] = clipThumbs.keys();
+    URL.revokeObjectURL(clipThumbs.get(oldest));
+    clipThumbs.delete(oldest);
+  }
+  clipThumbs.set(key, url);
+  return url;
+}
+
+let thumbRun = 0;
+async function refreshClipThumbs(item) {
+  const run = ++thumbRun;
+  const room = Math.max(1, Math.min(MAX_CLIP, (item.duration || 0) - (item.start || 0)));
+  const from = item.start || 0;
+  const to = Math.min((item.duration || 0) - 0.05, from + Math.min(item.clip ?? room, room));
+  const startURL = await frameURL(item, from);
+  if (run !== thumbRun) return;                   // a newer request won
+  $('#video-thumb-start').src = startURL || posterOf(item);
+  const endURL = await frameURL(item, to);
+  if (run !== thumbRun) return;
+  $('#video-thumb-end').src = endURL || posterOf(item);
 }
 
 async function addVideoItem(file) {
@@ -2380,7 +2456,9 @@ async function recordSlide(index, imageMap, onProgress) {
   canvas.width = OUT_W;
   canvas.height = OUT_H;
   const ctx = canvas.getContext('2d');
-  const stream = canvas.captureStream(CLIP_FPS);
+  const fps = clamp(lead.fps || CLIP_FPS, 24, 60);
+  const stream = canvas.captureStream(0);          // 0 = we decide when a frame is ready
+  const [track] = stream.getVideoTracks();
 
   // the sound comes from the first clip, and only if you asked for it
   if (lead.audio && lead.hasAudio) {
@@ -2408,9 +2486,10 @@ async function recordSlide(index, imageMap, onProgress) {
     const timer = setInterval(() => {
       const elapsed = (performance.now() - started) / 1000;
       drawSlideOn(ctx, index, frameMap);
+      track.requestFrame?.();                      // this drawing is the next frame of the film
       onProgress?.(Math.min(1, elapsed / seconds));
       if (elapsed >= seconds) { clearInterval(timer); resolve(); }
-    }, 1000 / CLIP_FPS);
+    }, 1000 / fps);
   });
 
   players.forEach(({ video }) => { video.pause(); });
@@ -2509,7 +2588,7 @@ async function prepareExport() {
       exported.push({ index, blob, url: URL.createObjectURL(blob), name: `album-slide-${pad(index)}.png` });
     }
     grid.innerHTML = exported.map(e => `<figure class="export-item${e.movie ? ' movie' : ''}">
-      ${e.movie ? `<video src="${e.url}" muted playsinline loop autoplay poster="${e.poster || ''}"></video>`
+      ${e.movie ? `<video src="${e.url}" muted playsinline controls poster="${e.poster || ''}"></video>`
                 : `<img src="${e.url}" alt="Slide ${pad(e.index)}">`}
       <figcaption>${pad(e.index)}${e.movie ? ' · video' : ''}</figcaption>
       <a class="btn" href="${e.url}" download="${e.name}">Salva</a>
@@ -2652,9 +2731,15 @@ function fitZoom({ auto = false } = {}) {
   if (!available.w || !available.h) return;        // layout not settled yet: a later measure will do it
   if (auto && !autoZoom) return;                   // you chose a zoom: leave it alone
   // Fill the height first — that is what makes the strip readable — but never so much that the
-  // seam with the next slide falls out of view: keep at least 1.8 slides across.
-  const byHeight = (available.h - 56) * OUT_W / OUT_H;
-  const byWidth = (available.w - 44) / Math.min(project.slideCount, 1.8);
+  // seam with the next slide falls out of view: keep at least 1.8 slides across. The paddings are
+  // read from the scroller itself: guessing them left the strip a few pixels too tall, which showed
+  // up as an unwanted vertical scroll.
+  const scroller = $('#strip-scroll');
+  const style = getComputedStyle(scroller);
+  const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+  const byHeight = (available.h - padY) * OUT_W / OUT_H;
+  const byWidth = (available.w - padX) / Math.min(project.slideCount, 1.8);
   const next = clamp(Math.min(byHeight, byWidth), 110, 620);
   if (Math.abs(next - slideW) < 0.5) return;       // nothing to redraw
   slideW = next;
@@ -2693,6 +2778,13 @@ function init() {
   };
   $('#video-clip').oninput = e => { const i = selected(); if (i) { i.clip = +e.target.value; render(); } };
   $('#video-audio').onchange = e => { const i = selected(); if (i) { pushUndo(); i.audio = e.target.checked; render(); } };
+  $('#video-fps').onchange = e => { const i = selected(); if (i) { pushUndo(); i.fps = +e.target.value; renderInspector(); } };
+  $('#video-play').onclick = () => {
+    const i = selected();
+    if (!i || itemKind(i) !== 'video') return;
+    playingVideo = playingVideo === i.id ? null : i.id;
+    render();
+  };
   $('#video-cover').onclick = async () => {
     const i = selected();
     if (!i || itemKind(i) !== 'video') return;
@@ -2850,6 +2942,7 @@ function init() {
   $('#zoom-in').onclick = () => { autoZoom = false; slideW = clamp(slideW * 1.15, 110, 620); render(); };
   $('#zoom-out').onclick = () => { autoZoom = false; slideW = clamp(slideW / 1.15, 110, 620); render(); };
   $('#zoom-fit').onclick = () => { autoZoom = true; fitZoom(); };
+  $('#add-slide-here').onclick = () => changeSlideCount(1);
 
   $('#save-project').onclick = saveProject;
   $('#save-template').onclick = saveAsTemplate;

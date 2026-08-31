@@ -13,3 +13,6 @@ _check.html
 _report.txt
 node_modules/
 *.log
+
+# scratch probes
+_*
