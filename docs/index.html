@@ -1047,6 +1047,20 @@ const firstSlideOf = item => Math.max(0, Math.floor(item.x + 0.001));
 const lastSlideOf = item => Math.min(project.slideCount - 1, Math.ceil(item.x + item.w - 0.001) - 1);
 const spanOf = item => Math.max(1, lastSlideOf(item) - firstSlideOf(item) + 1);
 
+// The export records one slide at a time, so a video lying across a seam would come out cut into
+// two files. Rather than letting you discover that at export time, a clip is pulled into the slide
+// its middle sits in: drag it past the halfway point and it jumps over whole.
+function keepClipInOneSlide(item) {
+  if (!item || itemKind(item) !== 'video') return false;
+  const slide = clamp(Math.floor(item.x + item.w / 2), 0, project.slideCount - 1);
+  const w = Math.min(item.w, 1);
+  const x = clamp(item.x, slide, slide + 1 - w);
+  const changed = Math.abs(w - item.w) > 1e-9 || Math.abs(x - item.x) > 1e-9;
+  item.w = w;
+  item.x = x;
+  return changed;
+}
+
 // Work that takes a moment must say so. Shown only after a short delay, so quick operations do not
 // make the interface flash.
 let busyJobs = 0, busyTimer = null;
@@ -1818,9 +1832,11 @@ function renderInspector() {
 
   const span = spanOf(item), first = firstSlideOf(item), last = lastSlideOf(item);
   $('#sel-span-label').textContent = span === 1 ? '1 slide' : `${span} slide`;
-  $('#item-position-note').textContent = span === 1
-    ? `Sta tutta dentro la slide ${pad(first)}.`
-    : `È a cavallo delle slide ${pad(first)}–${pad(last)}: verrà tagliata sui confini.`;
+  $('#item-position-note').textContent = itemKind(item) === 'video'
+    ? `Sta nella slide ${pad(first)}. Un video resta dentro una slide: l’export registra una slide alla volta.`
+    : span === 1
+      ? `Sta tutta dentro la slide ${pad(first)}.`
+      : `È a cavallo delle slide ${pad(first)}–${pad(last)}: verrà tagliata sui confini.`;
   // only a photo has something to frame inside itself: colour and text swap those controls out
   const kind = itemKind(item);
   const isPhoto = kind === 'image' || kind === 'video';
@@ -1832,9 +1848,8 @@ function renderInspector() {
   if (kind === 'video') {
     const duration = item.duration || 0;
     const maxStart = Math.max(0, duration - 1);
-    const room = Math.max(1, Math.min(MAX_CLIP, duration - (item.start || 0)));
-    // the slider under your finger keeps its own value: writing it back mid-drag made the two
-    // sliders look like they moved together
+    // Both scales are fixed: shrinking the duration scale as you moved the start made the duration
+    // handle slide across the track even though its value had not changed.
     const dragging = document.activeElement;
     if (dragging !== $('#video-start')) {
       $('#video-start').max = maxStart.toFixed(1);
@@ -1842,17 +1857,22 @@ function renderInspector() {
     }
     $('#video-start-value').value = `${(item.start || 0).toFixed(1)}s`;
     if (dragging !== $('#video-clip')) {
-      $('#video-clip').max = room.toFixed(1);
-      $('#video-clip').value = Math.min(item.clip ?? room, room);
+      $('#video-clip').max = Math.max(1, Math.min(MAX_CLIP, duration)).toFixed(1);
+      $('#video-clip').value = item.clip ?? Math.min(MAX_CLIP, duration);
     }
-    $('#video-clip-value').value = formatClip(item);
+    // the value you asked for stays put; if the end of the video cuts it short, say so here
+    const asked = item.clip ?? Math.min(MAX_CLIP, duration);
+    const real = clipWindow(item).len;
+    $('#video-clip-value').value = real < asked - 0.05
+      ? `${real.toFixed(1)}s — il video finisce prima`
+      : formatClip(item);
     showClip(item);
     $('#video-audio').checked = Boolean(item.audio && item.hasAudio);
     $('#video-audio').disabled = !item.hasAudio;
     $('#video-audio-label').textContent = item.hasAudio ? 'Includi l’audio' : 'Questo video non ha audio';
     $('#video-fps').value = String(item.fps || CLIP_FPS);
-    $('#video-at-start').textContent = `${(item.start || 0).toFixed(1)}s`;
-    $('#video-at-end').textContent = `${((item.start || 0) + Math.min(item.clip ?? room, room)).toFixed(1)}s`;
+    $('#video-at-start').textContent = `${clipWindow(item).from.toFixed(1)}s`;
+    $('#video-at-end').textContent = `${clipWindow(item).to.toFixed(1)}s`;
     $('#video-play').textContent = playingVideo === item.id ? '❚❚ Ferma' : '▶ Riproduci questo tratto';
     refreshClipThumbs(item);
     $('#video-note').textContent = duration > MAX_CLIP
@@ -2165,6 +2185,7 @@ function setupItemPointer(node, item, width) {
           item.h = bottom - item.y;
         }
       }
+      keepClipInOneSlide(item);
       styleItem(node, item, width);
       $('.span-tag', node).textContent = `↔ ${spanOf(item)} slide`;
       node.classList.toggle('spanning', spanOf(item) > 1);
@@ -2546,7 +2567,7 @@ const clipThumbs = new Map();
 async function frameURL(item, at) {
   const key = `${item.id}@${at.toFixed(2)}`;
   if (clipThumbs.has(key)) return clipThumbs.get(key);
-  const blob = await grabFrame(item, at);
+  const blob = await grabFrame(item, at, 360);
   if (!blob) return '';
   const url = URL.createObjectURL(blob);
   if (clipThumbs.size > 40) {                     // keep the cache small
@@ -2571,6 +2592,28 @@ function releaseClip() {
 
 // One <video> for the whole app, parked in the element panel. It used to sit in the workspace,
 // where every redraw spawned another decoder and the app locked up.
+let clipShown = '';
+
+// Light refresh while a slider moves: labels, the player position and the two end frames. Running
+// the whole inspector on every input event was what still felt jerky.
+function showVideoReadout(item) {
+  const { from, len } = clipWindow(item);
+  const asked = item.clip ?? Math.min(MAX_CLIP, item.duration || 0);
+  $('#video-start-value').value = `${from.toFixed(1)}s`;
+  $('#video-clip-value').value = len < asked - 0.05
+    ? `${len.toFixed(1)}s — il video finisce prima`
+    : `${len.toFixed(1)}s`;
+  $('#video-at-start').textContent = `${from.toFixed(1)}s`;
+  $('#video-at-end').textContent = `${(from + len).toFixed(1)}s`;
+  const player = $('#video-preview');
+  if (player.dataset.for === item.id && player.paused && player.readyState >= 1) {
+    clipShown = `${item.id}|${from.toFixed(2)}`;
+    player.currentTime = from;
+  }
+  refreshClipThumbs(item);
+  scheduleAutosave();
+}
+
 function showClip(item) {
   const player = $('#video-preview');
   const url = srcOf(item);
@@ -2581,7 +2624,12 @@ function showClip(item) {
   }
   const { from, to } = clipWindow(item);
   player.onloadedmetadata = () => { player.currentTime = from; };
-  if (player.readyState >= 1 && player.paused) player.currentTime = from;
+  // seeking on every render meant thirty seeks a second while a slider moved
+  const key = `${item.id}|${from.toFixed(2)}`;
+  if (key !== clipShown) {
+    clipShown = key;
+    if (player.readyState >= 1 && player.paused) player.currentTime = from;
+  }
   player.ontimeupdate = () => {
     $('#video-now').textContent = `${Math.max(0, player.currentTime - from).toFixed(1)}s / ${(to - from).toFixed(1)}s`;
     if (player.currentTime >= to) player.currentTime = from;   // loops inside the window you picked
@@ -2593,7 +2641,16 @@ function showClip(item) {
 }
 
 let thumbRun = 0;
-async function refreshClipThumbs(item) {
+let thumbTimer = null;
+
+// Reading a frame means seeking a video: fired on every slider event the requests piled up and the
+// pictures lagged behind. One pair, shortly after you stop.
+function refreshClipThumbs(item) {
+  clearTimeout(thumbTimer);
+  thumbTimer = setTimeout(() => drawClipThumbs(item), 180);
+}
+
+async function drawClipThumbs(item) {
   const run = ++thumbRun;
   const { from, to: windowEnd } = clipWindow(item);
   const to = Math.min((item.duration || 0) - 0.05, windowEnd);
@@ -2613,6 +2670,7 @@ async function addVideoItem(file) {
       x: selectedSlide + 0.12, y: 0.22, w: 0.76, h: 0.46,
       frame: 'clean', radius: 12
     });
+    keepClipInOneSlide(item);
     project.items.push(item);
     selectedItem = item.id;
     render();
@@ -3350,16 +3408,32 @@ function drawItem(ctx, item, image, index) {
   ctx.restore();
 }
 
-// Reads one frame out of a video, for the cover picture.
-async function grabFrame(item, at) {
+// Reads one frame out of a video, for the cover picture and the two end previews.
+// One hidden element does all the reading: a fresh <video> per frame re-loaded the whole clip every
+// time, which is why the previews crawled. Calls are queued because they share that element.
+let grabber = null;
+let grabQueue = Promise.resolve();
+const grabFrame = (item, at, maxSide = 0) => {
+  const next = () => grabFrameNow(item, at, maxSide);
+  grabQueue = grabQueue.then(next, next);
+  return grabQueue;
+};
+
+async function grabFrameNow(item, at, maxSide = 0) {
   const url = srcOf(item);
   if (!url) return null;
-  const video = document.createElement('video');
-  video.muted = true;
-  video.playsInline = true;
-  video.preload = 'auto';
-  video.src = url;
+  if (!grabber) {
+    grabber = document.createElement('video');
+    grabber.muted = true;
+    grabber.playsInline = true;
+    grabber.preload = 'auto';
+  }
+  const video = grabber;
   try {
+    if (video.dataset.src !== url) {
+      video.dataset.src = url;
+      video.src = url;
+    }
     // wait for pixels, not just for the header: with metadata alone the canvas comes out black
     await new Promise((resolve, reject) => {
       if (video.readyState >= 2) return resolve();
@@ -3376,10 +3450,13 @@ async function grabFrame(item, at) {
       video.currentTime = target;
       setTimeout(resolve, 4000);
     });
+    const w = video.videoWidth || 640;
+    const h = video.videoHeight || 480;
+    const scale = maxSide ? Math.min(1, maxSide / Math.max(w, h)) : 1;
     const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
-    canvas.getContext('2d').drawImage(video, 0, 0);
+    canvas.width = Math.round(w * scale);
+    canvas.height = Math.round(h * scale);
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
     return await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.82));
   } catch {
     return null;
@@ -3774,15 +3851,10 @@ function init() {
   $('#add-photo').onchange = e => { readFiles(e.target.files, src => addItem(src, 'free')); e.target.value = ''; };
   $('#add-color').onclick = addColourBlock;
   $('#add-video').onchange = e => { const file = e.target.files[0]; if (file) addVideoItem(file); e.target.value = ''; };
-  $('#video-start').oninput = e => {
-    const i = selected();
-    if (!i) return;
-    i.start = +e.target.value;
-    // shorten the window only when it would run past the end of the video
-    i.clip = Math.min(i.clip ?? MAX_CLIP, Math.max(1, Math.min(MAX_CLIP, (i.duration || 0) - i.start)));
-    renderInspector();
-  };
-  $('#video-clip').oninput = e => { const i = selected(); if (i) { i.clip = +e.target.value; renderInspector(); } };
+  // Only the value you are dragging changes. clipWindow() already stops the window running past
+  // the end of the video, so there is no reason to touch the other slider.
+  $('#video-start').oninput = e => { const i = selected(); if (i) { i.start = +e.target.value; showVideoReadout(i); } };
+  $('#video-clip').oninput = e => { const i = selected(); if (i) { i.clip = +e.target.value; showVideoReadout(i); } };
   // the strip badge and the layer list read the length: refresh them once, on release
   $('#video-start').onchange = () => render();
   $('#video-clip').onchange = () => render();
@@ -4046,6 +4118,7 @@ if (typeof document !== 'undefined') init();
 if (typeof module !== 'undefined') module.exports = {
   remapAfterDelete, remapAfterMove, insideSlide, spanOf, fillOccupiedSlides, normalize,
   useIndexedDB, putProject, allProjects, deleteProject, storageModeNow: () => storageMode, mediaKey, isDirectSrc, clipWindow,
+  keepClipInOneSlide, itemKind,
   setSlideCount: n => { project.slideCount = n; }
 };
 
