@@ -223,7 +223,11 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 
 .item.is-empty .item-box{border-style:dashed!important;border-color:#ffffff5c!important;background:#ffffff0a}
 .item video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;display:block}
-.clip-ends{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+/* the only <video> in the app: keeping playback here is what stopped the workspace from stalling */
+.clip-stage{position:relative;margin-bottom:8px;border-radius:10px;overflow:hidden;background:#000;border:1px solid var(--line)}
+.clip-stage video{display:block;width:100%;max-height:210px;object-fit:contain;background:#000}
+.clip-time{position:absolute;right:6px;bottom:6px;background:#000000b8;color:#fff;font-size:10px;padding:2px 7px;border-radius:20px;font-variant-numeric:tabular-nums}
+.clip-ends{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:10px 0}
 .clip-ends figure{margin:0}
 .clip-ends img{width:100%;aspect-ratio:1/1;object-fit:cover;border-radius:8px;background:#111;display:block;border:1px solid var(--line)}
 .clip-ends figcaption{font-size:9.5px;color:var(--muted);margin-top:4px;text-align:center}
@@ -455,9 +459,9 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
     <header class="topbar">
       <div class="brand"><span class="brand-mark">A</span><span class="brand-name">ALBUM STUDIO</span></div>
       <nav class="tabs">
-        <button class="tab active" data-panel="editor" title="Compone il carosello su cui stai lavorando"><span class="tab-ico">▤▤</span><span class="tab-text">Composizione</span></button>
-        <button class="tab" data-panel="layouts" title="Schemi pronti da applicare e riempire con le tue foto"><span class="tab-ico">✦</span><span class="tab-text">Schemi pronti</span></button>
-        <button class="tab" data-panel="projects" title="I caroselli che hai salvato su questo dispositivo"><span class="tab-ico">🖿</span><span class="tab-text">Salvati</span></button>
+        <button class="tab active" data-panel="editor" title="Compone il carosello su cui stai lavorando"><span class="tab-ico">✎</span><span class="tab-text">Composizione</span></button>
+        <button class="tab" data-panel="layouts" title="Template da applicare e riempire con le tue foto"><span class="tab-ico">▦</span><span class="tab-text">Template</span></button>
+        <button class="tab" data-panel="projects" title="I caroselli che hai salvato su questo dispositivo"><span class="tab-ico">⧉</span><span class="tab-text">Salvati</span></button>
       </nav>
       <div class="top-actions">
         <button class="btn icon" id="help-open" title="Come funziona">?</button>
@@ -551,15 +555,19 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 
               <div id="video-controls" class="hidden">
                 <p class="note" id="video-note"></p>
-                <div class="clip-ends">
-                  <figure><img id="video-thumb-start" alt=""><figcaption>inizio <b id="video-at-start">0s</b></figcaption></figure>
-                  <figure><img id="video-thumb-end" alt=""><figcaption>fine <b id="video-at-end">0s</b></figcaption></figure>
+                <div class="clip-stage">
+                  <video id="video-preview" muted playsinline preload="metadata"></video>
+                  <span class="clip-time" id="video-now">0s</span>
                 </div>
                 <button class="btn wide" id="video-play">▶ Riproduci questo tratto</button>
                 <label class="range-label">Inizia da <output id="video-start-value">0s</output></label>
                 <input id="video-start" type="range" min="0" max="100" step="0.1" value="0" title="Da quale punto del video parte la slide">
                 <label class="range-label">Durata <output id="video-clip-value">0s</output></label>
                 <input id="video-clip" type="range" min="1" max="30" step="0.5" value="30" title="Massimo 30 secondi per slide">
+                <div class="clip-ends">
+                  <figure><img id="video-thumb-start" alt=""><figcaption>inizio <b id="video-at-start">0s</b></figcaption></figure>
+                  <figure><img id="video-thumb-end" alt=""><figcaption>fine <b id="video-at-end">0s</b></figcaption></figure>
+                </div>
                 <label class="check"><input id="video-audio" type="checkbox" checked> <span id="video-audio-label">Includi l'audio</span></label>
                 <button class="btn wide" id="video-cover">Usa il fotogramma iniziale come copertina</button>
                 <h4>Esportazione</h4>
@@ -977,7 +985,7 @@ const newProject = () => ({
 let project = newProject();
 let selectedSlide = 0;
 let selectedItem = null;
-let playingVideo = null;    // at most one clip runs, and only because you asked for it
+let playingVideo = null;    // id of the clip the panel player is showing, when it is running
 let slideW = 260;
 let mode = 'edit';
 let showGuides = true;
@@ -1495,9 +1503,6 @@ function buildStrip(host, width, interactive) {
   host.style.height = `${width * OUT_H / OUT_W}px`;
   host.style.background = project.bgColor;
   host.classList.toggle('guides', showGuides && interactive);
-  // stop and unhook the old clips first: dropping a playing <video> on the floor leaves its decoder
-  // running, and a slider drag redraws many times a second
-  host.querySelectorAll('video').forEach(v => { v.pause(); v.removeAttribute('src'); v.load(); });
   host.innerHTML = '';
 
   // Layer order matters for hit testing: the click-catcher for empty space sits *below* the images,
@@ -1549,9 +1554,7 @@ function buildStrip(host, width, interactive) {
     node.dataset.id = item.id;
     const inside = kind === 'text' ? '<div class="item-text"></div>'
       : kind === 'empty' ? '<div class="item-empty">＋</div>'
-      : kind === 'video' ? (interactive && playingVideo === item.id
-          ? `<video src="${srcOf(item)}" muted playsinline></video><span class="video-mark playing">❚❚ ferma</span>`
-          : `<img src="${posterOf(item)}" alt="">` + (interactive ? `<span class="video-mark">▶ ${formatClip(item)}</span>` : ''))
+      : kind === 'video' ? `<img src="${posterOf(item)}" alt="">` + (interactive ? `<span class="video-mark">▶ ${formatClip(item)}</span>` : '')
       : (item.src ? `<img src="${srcOf(item)}" alt="">` : '');
     node.innerHTML = `<div class="item-box">${inside}<span class="tint"></span></div><span class="tape"></span><span class="outline"></span>`
       // only on the one you picked: on every demo photo at once it covered the pictures
@@ -1566,29 +1569,8 @@ function buildStrip(host, width, interactive) {
     if (interactive) {
       $('.span-tag', node).textContent = `↔ ${spanOf(item)} slide`;
       setupItemPointer(node, item, width);
-      if (kind === 'video') setupClip(node, item);
     }
   });
-}
-
-// The badge doubles as play/pause. Nothing autoplays: a strip full of looping videos is what
-// jammed the workspace, and a redraw used to spawn a fresh decoder for every one of them.
-function setupClip(node, item) {
-  const badge = $('.video-mark', node);
-  if (badge) badge.onpointerdown = e => {
-    e.stopPropagation();
-    playingVideo = playingVideo === item.id ? null : item.id;
-    render();
-  };
-  const video = $('video', node);
-  if (!video) return;
-  const from = item.start || 0;
-  const to = from + clipSeconds(item);
-  // seeking before the metadata land is silently dropped, and the clip would start from zero
-  const seek = () => { video.currentTime = from; };
-  if (video.readyState >= 1) seek(); else video.onloadedmetadata = seek;
-  video.ontimeupdate = () => { if (video.currentTime >= to || video.currentTime < from - 0.1) video.currentTime = from; };
-  video.play().catch(() => { playingVideo = null; });
 }
 
 function styleItem(node, item, width) {
@@ -1800,6 +1782,7 @@ function renderInspector() {
   // Only the visibility of the panel is ours to decide: whether a section is expanded belongs to
   // whoever opened it. Forcing it on every render slammed sections shut mid-task.
   $('#sec-item').classList.toggle('hidden', !item);
+  if (!item || itemKind(item) !== 'video') releaseClip();   // nothing to play: hand the decoder back
   $('#sel-slide-label').textContent = pad(selectedSlide);
   $('#recipe-slide').textContent = pad(selectedSlide);
   $('#slide-count-label').textContent = project.slideCount;
@@ -1836,13 +1819,21 @@ function renderInspector() {
   if (kind === 'video') {
     const duration = item.duration || 0;
     const maxStart = Math.max(0, duration - 1);
-    $('#video-start').max = maxStart.toFixed(1);
-    $('#video-start').value = Math.min(item.start || 0, maxStart);
-    $('#video-start-value').value = `${(item.start || 0).toFixed(1)}s`;
     const room = Math.max(1, Math.min(MAX_CLIP, duration - (item.start || 0)));
-    $('#video-clip').max = room.toFixed(1);
-    $('#video-clip').value = Math.min(item.clip ?? room, room);
+    // the slider under your finger keeps its own value: writing it back mid-drag made the two
+    // sliders look like they moved together
+    const dragging = document.activeElement;
+    if (dragging !== $('#video-start')) {
+      $('#video-start').max = maxStart.toFixed(1);
+      $('#video-start').value = Math.min(item.start || 0, maxStart);
+    }
+    $('#video-start-value').value = `${(item.start || 0).toFixed(1)}s`;
+    if (dragging !== $('#video-clip')) {
+      $('#video-clip').max = room.toFixed(1);
+      $('#video-clip').value = Math.min(item.clip ?? room, room);
+    }
     $('#video-clip-value').value = formatClip(item);
+    showClip(item);
     $('#video-audio').checked = Boolean(item.audio && item.hasAudio);
     $('#video-audio').disabled = !item.hasAudio;
     $('#video-audio-label').textContent = item.hasAudio ? 'Includi l’audio' : 'Questo video non ha audio';
@@ -2546,17 +2537,48 @@ async function frameURL(item, at) {
   return url;
 }
 
+// Nothing selected, or something that is not a clip: let the decoder go.
+function releaseClip() {
+  const player = $('#video-preview');
+  if (!player || !player.dataset.for) return;
+  playingVideo = null;
+  player.pause();
+  player.removeAttribute('src');
+  player.load();
+  delete player.dataset.for;
+}
+
+// One <video> for the whole app, parked in the element panel. It used to sit in the workspace,
+// where every redraw spawned another decoder and the app locked up.
+function showClip(item) {
+  const player = $('#video-preview');
+  const url = srcOf(item);
+  if (player.dataset.for !== item.id) {           // switching clips: load once, not on every render
+    player.dataset.for = item.id;
+    player.src = url;
+    player.load();
+  }
+  const from = item.start || 0;
+  const to = from + clipSeconds(item);
+  player.onloadedmetadata = () => { player.currentTime = from; };
+  if (player.readyState >= 1 && player.paused) player.currentTime = from;
+  player.ontimeupdate = () => {
+    $('#video-now').textContent = `${Math.max(0, player.currentTime - from).toFixed(1)}s / ${(to - from).toFixed(1)}s`;
+    if (player.currentTime >= to) player.currentTime = from;   // loops inside the window you picked
+  };
+  if (playingVideo === item.id) player.play().catch(() => { playingVideo = null; });
+  else player.pause();
+}
+
 let thumbRun = 0;
 async function refreshClipThumbs(item) {
   const run = ++thumbRun;
   const room = Math.max(1, Math.min(MAX_CLIP, (item.duration || 0) - (item.start || 0)));
   const from = item.start || 0;
   const to = Math.min((item.duration || 0) - 0.05, from + Math.min(item.clip ?? room, room));
-  const startURL = await frameURL(item, from);
+  const [startURL, endURL] = await Promise.all([frameURL(item, from), frameURL(item, to)]);
   if (run !== thumbRun) return;                   // a newer request won
   $('#video-thumb-start').src = startURL || posterOf(item);
-  const endURL = await frameURL(item, to);
-  if (run !== thumbRun) return;
   $('#video-thumb-end').src = endURL || posterOf(item);
 }
 
@@ -3309,9 +3331,12 @@ async function grabFrame(item, at) {
       video.onerror = reject;
       setTimeout(reject, 10000);
     });
+    const target = Math.min(at, Math.max(0, (video.duration || 0) - 0.05));
     await new Promise(resolve => {
+      if (Math.abs(video.currentTime - target) < 0.02 && video.readyState >= 2) return resolve();
       video.onseeked = resolve;
-      video.currentTime = Math.min(at, Math.max(0, (video.duration || 0) - 0.05));
+      video.oncanplay = () => { if (Math.abs(video.currentTime - target) < 0.05) resolve(); };
+      video.currentTime = target;
       setTimeout(resolve, 4000);
     });
     const canvas = document.createElement('canvas');
@@ -3704,17 +3729,21 @@ function init() {
     const i = selected();
     if (!i) return;
     i.start = +e.target.value;
+    // shorten the window only when it would run past the end of the video
     i.clip = Math.min(i.clip ?? MAX_CLIP, Math.max(1, Math.min(MAX_CLIP, (i.duration || 0) - i.start)));
-    render();
+    renderInspector();
   };
-  $('#video-clip').oninput = e => { const i = selected(); if (i) { i.clip = +e.target.value; render(); } };
+  $('#video-clip').oninput = e => { const i = selected(); if (i) { i.clip = +e.target.value; renderInspector(); } };
+  // the strip badge and the layer list read the length: refresh them once, on release
+  $('#video-start').onchange = () => render();
+  $('#video-clip').onchange = () => render();
   $('#video-audio').onchange = e => { const i = selected(); if (i) { pushUndo(); i.audio = e.target.checked; render(); } };
   $('#video-fps').onchange = e => { const i = selected(); if (i) { pushUndo(); i.fps = +e.target.value; renderInspector(); } };
   $('#video-play').onclick = () => {
     const i = selected();
     if (!i || itemKind(i) !== 'video') return;
     playingVideo = playingVideo === i.id ? null : i.id;
-    render();
+    renderInspector();
   };
   $('#video-cover').onclick = async () => {
     const i = selected();
