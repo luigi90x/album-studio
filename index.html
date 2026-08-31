@@ -12,9 +12,9 @@
     <header class="topbar">
       <div class="brand"><span class="brand-mark">A</span><span class="brand-name">ALBUM STUDIO</span></div>
       <nav class="tabs">
-        <button class="tab active" data-panel="editor" title="Compone il carosello su cui stai lavorando"><span class="tab-ico">▤▤</span><span class="tab-text">Composizione</span></button>
-        <button class="tab" data-panel="layouts" title="Schemi pronti da applicare e riempire con le tue foto"><span class="tab-ico">✦</span><span class="tab-text">Schemi pronti</span></button>
-        <button class="tab" data-panel="projects" title="I caroselli che hai salvato su questo dispositivo"><span class="tab-ico">🖿</span><span class="tab-text">Salvati</span></button>
+        <button class="tab active" data-panel="editor" title="Compone il carosello su cui stai lavorando"><span class="tab-ico">✎</span><span class="tab-text">Composizione</span></button>
+        <button class="tab" data-panel="layouts" title="Template da applicare e riempire con le tue foto"><span class="tab-ico">▦</span><span class="tab-text">Template</span></button>
+        <button class="tab" data-panel="projects" title="I caroselli che hai salvato su questo dispositivo"><span class="tab-ico">⧉</span><span class="tab-text">Salvati</span></button>
       </nav>
       <div class="top-actions">
         <button class="btn icon" id="help-open" title="Come funziona">?</button>
@@ -108,15 +108,19 @@
 
               <div id="video-controls" class="hidden">
                 <p class="note" id="video-note"></p>
-                <div class="clip-ends">
-                  <figure><img id="video-thumb-start" alt=""><figcaption>inizio <b id="video-at-start">0s</b></figcaption></figure>
-                  <figure><img id="video-thumb-end" alt=""><figcaption>fine <b id="video-at-end">0s</b></figcaption></figure>
+                <div class="clip-stage">
+                  <video id="video-preview" muted playsinline preload="metadata"></video>
+                  <span class="clip-time" id="video-now">0s</span>
                 </div>
                 <button class="btn wide" id="video-play">▶ Riproduci questo tratto</button>
                 <label class="range-label">Inizia da <output id="video-start-value">0s</output></label>
                 <input id="video-start" type="range" min="0" max="100" step="0.1" value="0" title="Da quale punto del video parte la slide">
                 <label class="range-label">Durata <output id="video-clip-value">0s</output></label>
                 <input id="video-clip" type="range" min="1" max="30" step="0.5" value="30" title="Massimo 30 secondi per slide">
+                <div class="clip-ends">
+                  <figure><img id="video-thumb-start" alt=""><figcaption>inizio <b id="video-at-start">0s</b></figcaption></figure>
+                  <figure><img id="video-thumb-end" alt=""><figcaption>fine <b id="video-at-end">0s</b></figcaption></figure>
+                </div>
                 <label class="check"><input id="video-audio" type="checkbox" checked> <span id="video-audio-label">Includi l'audio</span></label>
                 <button class="btn wide" id="video-cover">Usa il fotogramma iniziale come copertina</button>
                 <h4>Esportazione</h4>
