@@ -4,6 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="theme-color" content="#0f0f10" />
+  <!-- iOS reads these, not the manifest, when the app is added to the home screen -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Album Studio" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <title>Album Studio — caroselli fotografici locali</title>
   <style>
 :root{
@@ -460,8 +465,6 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 </style>
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 </head>
 <body>
   <div class="app">
@@ -1241,6 +1244,20 @@ function openDB() {
     request.onerror = () => reject(request.error);
     request.onblocked = () => reject(new Error('blocked'));
   });
+}
+
+// Installed as an app, the photos have to survive. Without this a browser treats the storage as
+// disposable: Safari clears it after about a week of not opening the app, Chrome when the disk
+// gets tight. Asking is silent when the browser has already decided, and harmless where it is
+// not supported.
+async function keepStorage() {
+  try {
+    if (!navigator.storage?.persist) return null;
+    if (await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return null;
+  }
 }
 
 async function useIndexedDB() {
@@ -4166,6 +4183,7 @@ function init() {
   applyFormat(project.format);
   watchStageSize();
   fitZoom();
+  keepStorage();
   migrateLegacyStorage().then(restoreAutosave);
 }
 

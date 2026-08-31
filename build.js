@@ -27,10 +27,9 @@ if (!forWeb) {
 
 // served from a real address it can be installed and cached for offline use
 html = html
+  // the app meta tags live in index.html now: only what the served copy needs goes in here
   .replace('</head>', `  <link rel="manifest" href="manifest.webmanifest" />
   <link rel="apple-touch-icon" href="icon-192.png" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 </head>`)
   .replace('</body>', `  <script>
     if ('serviceWorker' in navigator) addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));

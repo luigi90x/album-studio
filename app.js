@@ -288,6 +288,20 @@ function openDB() {
   });
 }
 
+// Installed as an app, the photos have to survive. Without this a browser treats the storage as
+// disposable: Safari clears it after about a week of not opening the app, Chrome when the disk
+// gets tight. Asking is silent when the browser has already decided, and harmless where it is
+// not supported.
+async function keepStorage() {
+  try {
+    if (!navigator.storage?.persist) return null;
+    if (await navigator.storage.persisted()) return true;
+    return await navigator.storage.persist();
+  } catch {
+    return null;
+  }
+}
+
 async function useIndexedDB() {
   if (storageMode) return storageMode === 'idb';
   try {
@@ -3211,6 +3225,7 @@ function init() {
   applyFormat(project.format);
   watchStageSize();
   fitZoom();
+  keepStorage();
   migrateLegacyStorage().then(restoreAutosave);
 }
 
