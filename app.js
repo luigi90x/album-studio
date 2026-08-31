@@ -1664,6 +1664,34 @@ function releaseClip() {
 // where every redraw spawned another decoder and the app locked up.
 let clipShown = '';
 
+// The same treatment the slide gives the clip — filters, veil, vignette, grain, zoom and framing —
+// so the look controls show their effect where you are actually watching. The video keeps its own
+// proportions: it is scaled to the height of the box and the width follows.
+function styleClipPlayer(item) {
+  const player = $('#video-preview');
+  if (!player || player.dataset.for !== item.id) return;
+  const stage = player.parentElement;
+  player.style.filter = photoCSS(item, (FRAMES[item.frame] || FRAMES.clean).filter);
+  player.style.objectPosition = `${item.panX}% ${item.panY}%`;
+  player.style.transform = `scale(${(item.zoom || 100) / 100})`;
+  player.style.transformOrigin = `${item.panX}% ${item.panY}%`;
+  const tint = $('.clip-tint', stage);
+  tint.style.background = overlayCSS(item);
+  // the veil belongs on the picture, not on the black bands beside it
+  const ratio = (player.videoWidth || 4) / (player.videoHeight || 5);
+  const boxW = stage.clientWidth, boxH = stage.clientHeight;
+  const zoom = (item.zoom || 100) / 100;
+  const base = Math.min(boxW, boxH * ratio);           // the picture at rest, letterboxed
+  const w = Math.min(boxW, base * zoom);               // zoomed in, what is still on screen
+  const h = Math.min(boxH, base / ratio * zoom);
+  Object.assign(tint.style, {
+    width: `${Math.round(w)}px`, height: `${Math.round(h)}px`,
+    left: `${Math.round((boxW - w) / 2)}px`, top: `${Math.round((boxH - h) / 2)}px`
+  });
+  stage.classList.toggle('grainy', Boolean(item.grain));
+  stage.style.setProperty('--grain', (item.grain || 0) / 100);
+}
+
 // Light refresh while a slider moves: labels, the player position and the two end frames. Running
 // the whole inspector on every input event was what still felt jerky.
 function showVideoReadout(item) {
@@ -1687,24 +1715,14 @@ function showVideoReadout(item) {
 function showClip(item) {
   const player = $('#video-preview');
   const url = srcOf(item);
-  // Same treatment the slide gives it, so the look controls are visible right here — on the poster
-  // in the workspace they were, but not on the clip you are watching.
-  const stage = player.parentElement;
-  player.style.filter = photoCSS(item, (FRAMES[item.frame] || FRAMES.clean).filter);
-  player.style.objectFit = 'cover';
-  player.style.objectPosition = `${item.panX}% ${item.panY}%`;
-  player.style.transform = `scale(${(item.zoom || 100) / 100})`;
-  player.style.transformOrigin = `${item.panX}% ${item.panY}%`;
-  $('.clip-tint', stage).style.background = overlayCSS(item);
-  stage.classList.toggle('grainy', Boolean(item.grain));
-  stage.style.setProperty('--grain', (item.grain || 0) / 100);
+  styleClipPlayer(item);
   if (player.dataset.for !== item.id) {           // switching clips: load once, not on every render
     player.dataset.for = item.id;
     player.src = url;
     player.load();
   }
   const { from, to } = clipWindow(item);
-  player.onloadedmetadata = () => { player.currentTime = from; };
+  player.onloadedmetadata = () => { player.currentTime = from; styleClipPlayer(item); };
   // seeking on every render meant thirty seeks a second while a slider moved
   const key = `${item.id}|${from.toFixed(2)}`;
   if (key !== clipShown) {
@@ -2924,6 +2942,7 @@ function restyleSelected() {
   const node = $(`#strip .item[data-id="${item.id}"]`);
   if (!node) { render(); return; }
   styleItem(node, item, slideW);       // this covers text nodes too
+  if (itemKind(item) === 'video') styleClipPlayer(item);
   scheduleAutosave();
 }
 
