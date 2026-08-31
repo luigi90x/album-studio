@@ -556,7 +556,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
               <div id="video-controls" class="hidden">
                 <p class="note" id="video-note"></p>
                 <div class="clip-stage">
-                  <video id="video-preview" muted playsinline preload="metadata"></video>
+                  <video id="video-preview" muted playsinline preload="auto"></video>
                   <span class="clip-time" id="video-now">0s</span>
                 </div>
                 <button class="btn wide" id="video-play">▶ Riproduci questo tratto</button>
@@ -2202,8 +2202,16 @@ function addItem(src, how = 'free') {
 const readingOrder = (a, b) => (firstSlideOf(a) - firstSlideOf(b)) || (a.y - b.y) || (a.x - b.x);
 const areaOf = item => item.w * item.h;
 
+// The stretch of video a slide shows. clipSeconds() takes a slide index, this one takes the clip:
+// mixing the two up left the player with a zero-length window, so it snapped back to the start
+// instead of playing.
+function clipWindow(item) {
+  const from = item.start || 0;
+  const len = Math.max(0.5, Math.min(item.clip ?? MAX_CLIP, MAX_CLIP, (item.duration || MAX_CLIP) - from));
+  return { from, to: from + len, len };
+}
 const formatClip = item => {
-  const seconds = Math.min(item.clip ?? MAX_CLIP, Math.max(0, (item.duration || 0) - (item.start || 0)));
+  const seconds = clipWindow(item).len;
   return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)}s`;
 };
 
@@ -2558,24 +2566,24 @@ function showClip(item) {
     player.src = url;
     player.load();
   }
-  const from = item.start || 0;
-  const to = from + clipSeconds(item);
+  const { from, to } = clipWindow(item);
   player.onloadedmetadata = () => { player.currentTime = from; };
   if (player.readyState >= 1 && player.paused) player.currentTime = from;
   player.ontimeupdate = () => {
     $('#video-now').textContent = `${Math.max(0, player.currentTime - from).toFixed(1)}s / ${(to - from).toFixed(1)}s`;
     if (player.currentTime >= to) player.currentTime = from;   // loops inside the window you picked
   };
-  if (playingVideo === item.id) player.play().catch(() => { playingVideo = null; });
-  else player.pause();
+  if (playingVideo !== item.id) { player.pause(); return; }
+  // play() on a video that has only its header loaded is refused: wait for real frames first
+  const go = () => player.play().catch(() => { playingVideo = null; });
+  if (player.readyState >= 2) go(); else player.oncanplay = go;
 }
 
 let thumbRun = 0;
 async function refreshClipThumbs(item) {
   const run = ++thumbRun;
-  const room = Math.max(1, Math.min(MAX_CLIP, (item.duration || 0) - (item.start || 0)));
-  const from = item.start || 0;
-  const to = Math.min((item.duration || 0) - 0.05, from + Math.min(item.clip ?? room, room));
+  const { from, to: windowEnd } = clipWindow(item);
+  const to = Math.min((item.duration || 0) - 0.05, windowEnd);
   const [startURL, endURL] = await Promise.all([frameURL(item, from), frameURL(item, to)]);
   if (run !== thumbRun) return;                   // a newer request won
   $('#video-thumb-start').src = startURL || posterOf(item);
@@ -3324,18 +3332,22 @@ async function grabFrame(item, at) {
   const video = document.createElement('video');
   video.muted = true;
   video.playsInline = true;
+  video.preload = 'auto';
   video.src = url;
   try {
+    // wait for pixels, not just for the header: with metadata alone the canvas comes out black
     await new Promise((resolve, reject) => {
-      video.onloadedmetadata = resolve;
+      if (video.readyState >= 2) return resolve();
+      video.onloadeddata = resolve;
       video.onerror = reject;
       setTimeout(reject, 10000);
     });
-    const target = Math.min(at, Math.max(0, (video.duration || 0) - 0.05));
+    const end = Math.max(0, (video.duration || 0) - 0.08);
+    let target = Math.min(Math.max(at, 0), end);
+    // seeking to where the video already is fires no 'seeked' — nudge it, or we wait for the timeout
+    if (Math.abs(video.currentTime - target) < 0.01) target = target > 0.02 ? target - 0.01 : target + 0.01;
     await new Promise(resolve => {
-      if (Math.abs(video.currentTime - target) < 0.02 && video.readyState >= 2) return resolve();
       video.onseeked = resolve;
-      video.oncanplay = () => { if (Math.abs(video.currentTime - target) < 0.05) resolve(); };
       video.currentTime = target;
       setTimeout(resolve, 4000);
     });
@@ -3369,7 +3381,7 @@ function clipSeconds(index) {
     .filter(item => itemKind(item) === 'video' && item.x < index + 1 && item.x + item.w > index)
     .sort(readingOrder)[0];
   if (!lead) return 0;
-  return Math.max(0.5, Math.min(lead.clip ?? MAX_CLIP, MAX_CLIP, (lead.duration || MAX_CLIP) - (lead.start || 0)));
+  return clipWindow(lead).len;
 }
 
 const videoSlides = () => Array.from({ length: project.slideCount }, (_, i) => i)
@@ -3991,7 +4003,7 @@ function init() {
 if (typeof document !== 'undefined') init();
 if (typeof module !== 'undefined') module.exports = {
   remapAfterDelete, remapAfterMove, insideSlide, spanOf, fillOccupiedSlides, normalize,
-  useIndexedDB, putProject, allProjects, deleteProject, storageModeNow: () => storageMode, mediaKey, isDirectSrc,
+  useIndexedDB, putProject, allProjects, deleteProject, storageModeNow: () => storageMode, mediaKey, isDirectSrc, clipWindow,
   setSlideCount: n => { project.slideCount = n; }
 };
 
