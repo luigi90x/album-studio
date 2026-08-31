@@ -48,6 +48,10 @@
               <button class="tool" id="add-text" title="Titolo, didascalia o etichetta">
                 <span class="tool-ico">T</span><span class="tool-name">Testo</span>
               </button>
+              <label class="tool" for="add-video" title="Un video dentro la slide, insieme a foto e testi. Funzione in prova">
+                <input id="add-video" type="file" accept="video/*" hidden>
+                <span class="tool-ico">▶</span><span class="tool-name">Video<i class="beta">beta</i></span>
+              </label>
             </div>
 
             <div class="bar-right">
@@ -97,6 +101,16 @@
               <label class="btn primary wide center" for="item-replace" title="Scegli un'immagine dal dispositivo: prende posizione, taglio e cornice di questa"><input id="item-replace" type="file" accept="image/*" hidden><span id="replace-label">↑ Usa una mia immagine qui</span></label>
               <p class="note" id="item-position-note">Occupa la slide 01.</p>
               <div class="field" id="item-fill-row"><span>Colore del riquadro</span><input id="item-fill-color" type="color" value="#e8e2d6" title="Questo riquadro è una tinta unita: scegli il colore"></div>
+
+              <div id="video-controls" class="hidden">
+                <p class="note" id="video-note"></p>
+                <label class="range-label">Inizia da <output id="video-start-value">0s</output></label>
+                <input id="video-start" type="range" min="0" max="100" step="0.1" value="0" title="Da quale punto del video parte la slide">
+                <label class="range-label">Durata <output id="video-clip-value">0s</output></label>
+                <input id="video-clip" type="range" min="1" max="30" step="0.5" value="30" title="Massimo 30 secondi per slide">
+                <label class="check"><input id="video-audio" type="checkbox" checked> <span id="video-audio-label">Includi l'audio</span></label>
+                <button class="btn wide" id="video-cover">Usa questo istante come copertina</button>
+              </div>
 
               <div id="text-controls" class="hidden">
                 <textarea id="item-text" rows="3" placeholder="Scrivi qui il testo…" title="A capo con Invio"></textarea>
@@ -340,7 +354,7 @@
         <h2>I miei progetti</h2>
         <p>Salvati sul dispositivo, senza account.</p>
         <p class="warn" id="storage-note"></p>
-        <label class="btn center" for="open-backup" style="max-width:260px;margin-top:12px" title="Riapri un progetto scaricato come file"><input id="open-backup" type="file" accept="application/json,.json" hidden> Apri un backup</label>
+        <label class="btn center" for="open-backup" style="max-width:260px;margin-top:12px" title="Riapri un progetto scaricato come file JSON"><input id="open-backup" type="file" accept="application/json,.json" hidden> Apri un backup JSON</label>
       </div>
       <div id="projects-grid" class="projects-grid"></div>
     </section>

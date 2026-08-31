@@ -126,6 +126,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 .tool:hover{border-color:var(--accent);background:#26262c}
 .tool:active{transform:scale(.97)}
 .tool-ico{font-size:17px;line-height:1;color:var(--accent)}
+.beta{display:block;font-style:normal;font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);margin-top:1px}
 .tool-name{font-size:10.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
 
 .bar-right{display:flex;align-items:center;gap:8px;margin-left:auto}
@@ -184,6 +185,9 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 .guide-v.on,.guide-h.on{display:block}
 
 .item.is-empty .item-box{border-style:dashed!important;border-color:#ffffff5c!important;background:#ffffff0a}
+.item video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;display:block}
+.video-mark{position:absolute;left:5px;bottom:5px;z-index:3;background:#000000b8;color:#fff;font-size:9.5px;
+  padding:3px 7px;border-radius:20px;pointer-events:none;white-space:nowrap}
 .item-empty{position:absolute;inset:0;display:grid;place-items:center;color:#ffffff8a;font-size:26px;pointer-events:none}
 .item.is-empty:hover .item-box{border-color:var(--accent)!important}
 .item .tint{position:absolute;inset:0;pointer-events:none}
@@ -311,6 +315,8 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
 .wide-dialog{width:min(560px,94vw)}
 .export-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:10px;margin-bottom:16px;max-height:46vh;overflow-y:auto}
 .export-item{margin:0;background:var(--panel-2);border:1px solid var(--line);border-radius:9px;padding:7px;text-align:center}
+.export-item video{width:100%;aspect-ratio:var(--slide-ratio);object-fit:cover;border-radius:5px;display:block;background:#000}
+.export-item.movie{border-color:var(--accent)}
 .export-item img{width:100%;aspect-ratio:var(--slide-ratio);object-fit:cover;border-radius:5px;display:block;background:#000}
 .export-item figcaption{font-size:9.5px;color:var(--muted);margin:5px 0}
 .export-item .btn{padding:6px;font-size:11px;width:100%;text-decoration:none;display:block;min-height:32px;line-height:20px}

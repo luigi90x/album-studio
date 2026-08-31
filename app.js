@@ -14,6 +14,8 @@ let OUT_W = FORMATS['4:5'].w, OUT_H = FORMATS['4:5'].h;
 const MIN_SLIDES = 1, MAX_SLIDES = 12;
 const MIN_W = 0.08, MIN_H = 0.05;   // smallest item, in slide units
 const MAX_PHOTO_SIDE = 1800;         // imported photos are downscaled to this
+const MAX_CLIP = 30;                 // seconds of video that end up in the export
+const CLIP_FPS = 24;                 // frames per second when recording a slide
 
 const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2));
 const clamp = (n, lo, hi) => Math.max(lo, Math.min(hi, n));
@@ -205,7 +207,8 @@ function shapeCSS(item, scale) {
 }
 
 // three shapes of the same item: a photo, a solid block, or a piece of text
-const itemKind = item => (item.text !== undefined && item.text !== null ? 'text'
+const itemKind = item => (item.video ? 'video'
+  : item.text !== undefined && item.text !== null ? 'text'
   : item.src ? 'image'
   : item.placeholder ? 'empty'
   : 'colour');
@@ -338,6 +341,13 @@ async function getMedia(id) {
 }
 
 // The URL to actually draw with. Ids resolve to an object URL created once per session.
+// While composing we draw the cover frame: a still image is cheap even with several videos on the
+// strip. The video itself is only played in preview mode and read again when recording the export.
+function posterOf(item) {
+  if (item && item.poster) return mediaCache.get(item.poster) || '';
+  return srcOf(item);
+}
+
 function srcOf(item) {
   const src = item && item.src;
   if (!src) return '';
@@ -347,7 +357,8 @@ function srcOf(item) {
 
 // Makes sure every id used by the project has its object URL ready before drawing.
 async function primeMedia(items = project.items) {
-  const missing = [...new Set(items.map(i => i.src).filter(src => src && !isDirectSrc(src) && !mediaCache.has(src)))];
+  const wanted = items.flatMap(i => [i.src, i.poster]);
+  const missing = [...new Set(wanted.filter(src => src && !isDirectSrc(src) && !mediaCache.has(src)))];
   for (const id of missing) {
     const blob = await getMedia(id);
     if (blob) mediaCache.set(id, URL.createObjectURL(blob));
@@ -414,6 +425,78 @@ async function importImage(file) {
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+
+// Videos are kept exactly as they came in: re-encoding them in the browser costs minutes and
+// quality, and the export re-draws them anyway. What we take out at import time is what the editor
+// needs to work without touching the file again: a cover frame, the duration, the size, and whether
+// there is any audio at all.
+async function probeVideo(file) {
+  const url = URL.createObjectURL(file);
+  const video = document.createElement('video');
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = 'metadata';
+  video.src = url;
+  try {
+    await new Promise((resolve, reject) => {
+      video.onloadedmetadata = resolve;
+      video.onerror = () => reject(new Error('formato non leggibile'));
+      setTimeout(() => reject(new Error('timeout')), 15000);
+    });
+    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+    // seek a little in: the very first frame is often black
+    const at = Math.min(duration * 0.1 || 0, 1);
+    await new Promise(resolve => {
+      video.onseeked = resolve;
+      video.currentTime = at;
+      setTimeout(resolve, 4000);
+    });
+    const canvas = document.createElement('canvas');
+    const scale = Math.min(1, MAX_PHOTO_SIDE / Math.max(video.videoWidth || 1, video.videoHeight || 1));
+    canvas.width = Math.max(1, Math.round((video.videoWidth || 640) * scale));
+    canvas.height = Math.max(1, Math.round((video.videoHeight || 480) * scale));
+    canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+    const poster = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+    return {
+      duration,
+      width: video.videoWidth,
+      height: video.videoHeight,
+      hasAudio: detectAudio(video),
+      poster
+    };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// No standard way to ask "does this have sound": try what the engines do offer.
+function detectAudio(video) {
+  if (typeof video.mozHasAudio === 'boolean') return video.mozHasAudio;
+  if (typeof video.webkitAudioDecodedByteCount === 'number') return video.webkitAudioDecodedByteCount > 0;
+  try {
+    if (typeof video.captureStream === 'function') return video.captureStream().getAudioTracks().length > 0;
+  } catch { /* not allowed before playback on some engines */ }
+  return true;   // assume there is sound: the switch lets you turn it off anyway
+}
+
+async function importVideo(file) {
+  if (storageMode === 'local') throw new Error('storage');
+  const info = await probeVideo(file);
+  const id = await putMedia(file);
+  const posterId = info.poster ? await putMedia(info.poster) : null;
+  if (!mediaCache.has(id)) mediaCache.set(id, URL.createObjectURL(file));
+  if (posterId && !mediaCache.has(posterId)) mediaCache.set(posterId, URL.createObjectURL(info.poster));
+  return {
+    src: id, poster: posterId, video: true,
+    duration: info.duration,
+    start: 0,
+    clip: Math.min(MAX_CLIP, info.duration || MAX_CLIP),
+    audio: info.hasAudio,
+    hasAudio: info.hasAudio,
+    videoWidth: info.width,
+    videoHeight: info.height
+  };
 }
 
 async function readFiles(fileList, callback) {
@@ -483,6 +566,9 @@ function buildStrip(host, width, interactive) {
     node.dataset.id = item.id;
     const inside = kind === 'text' ? '<div class="item-text"></div>'
       : kind === 'empty' ? '<div class="item-empty">＋</div>'
+      : kind === 'video' ? (interactive
+          ? `<img src="${posterOf(item)}" alt=""><span class="video-mark">▶ ${formatClip(item)}</span>`
+          : `<video src="${srcOf(item)}" muted playsinline loop autoplay poster="${posterOf(item)}"></video>`)
       : (item.src ? `<img src="${srcOf(item)}" alt="">` : '');
     node.innerHTML = `<div class="item-box">${inside}<span class="tint"></span></div><span class="tape"></span><span class="outline"></span>`
       // only on the one you picked: on every demo photo at once it covered the pictures
@@ -541,7 +627,7 @@ function styleItem(node, item, width) {
     textNode.style.padding = `${framePx(24, width)}px`;
   }
 
-  const img = $('img', node);
+  const img = $('img', node) || $('video', node);
   if (img) {
     img.style.objectPosition = `${item.panX}% ${item.panY}%`;
     img.style.transform = `scale(${item.zoom / 100})`;
@@ -728,11 +814,29 @@ function renderInspector() {
     : `È a cavallo delle slide ${pad(first)}–${pad(last)}: verrà tagliata sui confini.`;
   // only a photo has something to frame inside itself: colour and text swap those controls out
   const kind = itemKind(item);
-  const isPhoto = kind === 'image';
+  const isPhoto = kind === 'image' || kind === 'video';
   $('#sel-kind-label').textContent = { image: 'Immagine selezionata', colour: 'Riquadro colorato', text: 'Testo selezionato' }[kind];
   $('#item-fill-row').classList.toggle('hidden', kind !== 'colour');
   if (kind === 'colour') $('#item-fill-color').value = item.fill || '#888888';
   $('#text-controls').classList.toggle('hidden', kind !== 'text');
+  $('#video-controls').classList.toggle('hidden', kind !== 'video');
+  if (kind === 'video') {
+    const duration = item.duration || 0;
+    const maxStart = Math.max(0, duration - 1);
+    $('#video-start').max = maxStart.toFixed(1);
+    $('#video-start').value = Math.min(item.start || 0, maxStart);
+    $('#video-start-value').value = `${(item.start || 0).toFixed(1)}s`;
+    const room = Math.max(1, Math.min(MAX_CLIP, duration - (item.start || 0)));
+    $('#video-clip').max = room.toFixed(1);
+    $('#video-clip').value = Math.min(item.clip ?? room, room);
+    $('#video-clip-value').value = formatClip(item);
+    $('#video-audio').checked = Boolean(item.audio && item.hasAudio);
+    $('#video-audio').disabled = !item.hasAudio;
+    $('#video-audio-label').textContent = item.hasAudio ? 'Includi l’audio' : 'Questo video non ha audio';
+    $('#video-note').textContent = duration > MAX_CLIP
+      ? `Il video dura ${Math.round(duration)}s: nell'export entra la finestra scelta qui, al massimo ${MAX_CLIP}s.`
+      : `Video di ${duration.toFixed(1)}s. Nell'export la slide diventa un filmato con sopra tutto il resto.`;
+  }
   $('#item-replace').parentElement.classList.toggle('hidden', kind === 'text');
   ['#framing-head', '#item-zoom', '#item-panx', '#item-pany', '#look-head', '#item-grain', '#item-vignette',
    '#item-reset-look', '#item-exposure', '#item-contrast', '#item-shadows', '#item-saturation', '#item-warmth']
@@ -1086,6 +1190,11 @@ function addItem(src, how = 'free') {
 const readingOrder = (a, b) => (firstSlideOf(a) - firstSlideOf(b)) || (a.y - b.y) || (a.x - b.x);
 const areaOf = item => item.w * item.h;
 
+const formatClip = item => {
+  const seconds = Math.min(item.clip ?? MAX_CLIP, Math.max(0, (item.duration || 0) - (item.start || 0)));
+  return `${seconds < 10 ? seconds.toFixed(1) : Math.round(seconds)}s`;
+};
+
 // Filling order matters more than it looks. Straight reading order pours every photo into the first
 // slides and leaves the later ones empty — the carousel ends up with holes. So we go in rounds:
 // first the biggest frame of every slide, then the second biggest of every slide, and so on. With
@@ -1399,6 +1508,26 @@ function addTextItem() {
   render();
   $('#item-text').select();
   toast('Testo inserito: scrivilo nel pannello a destra');
+}
+
+async function addVideoItem(file) {
+  try {
+    const media = await importVideo(file);
+    pushUndo();
+    const item = newItem(media.src, {
+      ...media,
+      x: selectedSlide + 0.12, y: 0.22, w: 0.76, h: 0.46,
+      frame: 'clean', radius: 12
+    });
+    project.items.push(item);
+    selectedItem = item.id;
+    render();
+    toast(`Video di ${Math.round(media.duration)}s inserito${media.duration > MAX_CLIP ? ` — nell'export ne useremo ${MAX_CLIP}` : ''}`);
+  } catch (error) {
+    toast(error.message === 'storage'
+      ? 'I video servono spazio: apri l’app da localhost o dal sito, non come file'
+      : 'Non riesco a leggere questo video');
+  }
 }
 
 function addColourBlock() {
@@ -2079,8 +2208,10 @@ function drawItem(ctx, item, image, index) {
     ctx.fillRect(ix, iy, iw, ih);
   } else {
     // object-fit: cover with object-position panX/panY, then the zoom scale
-    const scale = Math.max(iw / image.naturalWidth, ih / image.naturalHeight) * (item.zoom / 100);
-    const dw = image.naturalWidth * scale, dh = image.naturalHeight * scale;
+    const mediaW = image.naturalWidth || image.videoWidth || 1;
+    const mediaH = image.naturalHeight || image.videoHeight || 1;
+    const scale = Math.max(iw / mediaW, ih / mediaH) * (item.zoom / 100);
+    const dw = mediaW * scale, dh = mediaH * scale;
     const look = photoCSS(item, spec.filter);
     if (look) ctx.filter = look;
     ctx.drawImage(image, ix - (dw - iw) * (item.panX / 100), iy - (dh - ih) * (item.panY / 100), dw, dh);
@@ -2102,11 +2233,162 @@ function drawItem(ctx, item, image, index) {
   ctx.restore();
 }
 
-async function drawSlide(index, imageMap) {
+// Reads one frame out of a video, for the cover picture.
+async function grabFrame(item, at) {
+  const url = srcOf(item);
+  if (!url) return null;
+  const video = document.createElement('video');
+  video.muted = true;
+  video.playsInline = true;
+  video.src = url;
+  try {
+    await new Promise((resolve, reject) => {
+      video.onloadedmetadata = resolve;
+      video.onerror = reject;
+      setTimeout(reject, 10000);
+    });
+    await new Promise(resolve => {
+      video.onseeked = resolve;
+      video.currentTime = Math.min(at, Math.max(0, (video.duration || 0) - 0.05));
+      setTimeout(resolve, 4000);
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = video.videoWidth || 640;
+    canvas.height = video.videoHeight || 480;
+    canvas.getContext('2d').drawImage(video, 0, 0);
+    return await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+  } catch {
+    return null;
+  }
+}
+
+// Which container this browser can actually write. Instagram wants MP4/H.264: Chrome and Safari
+// can, Firefox only offers WebM and there is no point pretending otherwise.
+function recorderType() {
+  if (typeof MediaRecorder === 'undefined') return null;
+  const wanted = [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4;codecs=avc1',
+    'video/mp4',
+    'video/webm;codecs=vp9,opus',
+    'video/webm'
+  ];
+  return wanted.find(type => MediaRecorder.isTypeSupported(type)) || null;
+}
+
+// how long the recording of a slide will run
+function clipSeconds(index) {
+  const lead = project.items
+    .filter(item => itemKind(item) === 'video' && item.x < index + 1 && item.x + item.w > index)
+    .sort(readingOrder)[0];
+  if (!lead) return 0;
+  return Math.max(0.5, Math.min(lead.clip ?? MAX_CLIP, MAX_CLIP, (lead.duration || MAX_CLIP) - (lead.start || 0)));
+}
+
+const videoSlides = () => Array.from({ length: project.slideCount }, (_, i) => i)
+  .filter(i => project.items.some(item => itemKind(item) === 'video' && item.x < i + 1 && item.x + item.w > i));
+
+// Records one slide as a film: the slide is redrawn frame by frame with the videos running inside
+// it, so photos, text, frames, shapes and filters all end up in the file. Real time, by necessity —
+// MediaRecorder writes as it goes.
+async function recordSlide(index, imageMap, onProgress) {
+  const type = recorderType();
+  if (!type) throw new Error('nessun formato video disponibile');
+
+  const clips = project.items
+    .filter(item => itemKind(item) === 'video' && item.x < index + 1 && item.x + item.w > index)
+    .sort(readingOrder);
+  const lead = clips[0];
+  const seconds = Math.max(0.5, Math.min(lead.clip ?? MAX_CLIP, MAX_CLIP, (lead.duration || MAX_CLIP) - (lead.start || 0)));
+
+  // one <video> per clip, all seeked to their starting point
+  const players = await Promise.all(clips.map(async item => {
+    const video = document.createElement('video');
+    video.src = srcOf(item);
+    video.muted = item !== lead || !item.audio;
+    video.playsInline = true;
+    video.preload = 'auto';
+    await new Promise((resolve, reject) => {
+      video.onloadeddata = resolve;
+      video.onerror = () => reject(new Error('video non leggibile'));
+      setTimeout(() => reject(new Error('timeout')), 20000);
+    });
+    await new Promise(resolve => {
+      video.onseeked = resolve;
+      video.currentTime = item.start || 0;
+      setTimeout(resolve, 5000);
+    });
+    return { item, video };
+  }));
+
   const canvas = document.createElement('canvas');
   canvas.width = OUT_W;
   canvas.height = OUT_H;
   const ctx = canvas.getContext('2d');
+  const stream = canvas.captureStream(CLIP_FPS);
+
+  // the sound comes from the first clip, and only if you asked for it
+  if (lead.audio && lead.hasAudio) {
+    try {
+      const leadPlayer = players.find(p => p.item === lead).video;
+      const source = leadPlayer.captureStream ? leadPlayer.captureStream() : null;
+      source?.getAudioTracks().forEach(track => stream.addTrack(track));
+    } catch { /* silent export rather than no export */ }
+  }
+
+  const chunks = [];
+  const recorder = new MediaRecorder(stream, { mimeType: type, videoBitsPerSecond: 8e6 });
+  recorder.ondataavailable = event => { if (event.data.size) chunks.push(event.data); };
+
+  const frameMap = new Map(imageMap);
+  players.forEach(({ item, video }) => frameMap.set(srcOf(item), video));   // draw the live frame
+
+  const started = performance.now();
+  recorder.start();
+  await Promise.all(players.map(({ video }) => video.play().catch(() => {})));
+
+  // A fixed timer, not requestAnimationFrame: rAF stops when the tab is hidden, which would leave
+  // the recording hanging half way. The timer keeps drawing at the frame rate we asked for.
+  await new Promise(resolve => {
+    const timer = setInterval(() => {
+      const elapsed = (performance.now() - started) / 1000;
+      drawSlideOn(ctx, index, frameMap);
+      onProgress?.(Math.min(1, elapsed / seconds));
+      if (elapsed >= seconds) { clearInterval(timer); resolve(); }
+    }, 1000 / CLIP_FPS);
+  });
+
+  players.forEach(({ video }) => { video.pause(); });
+  await new Promise(resolve => { recorder.onstop = resolve; recorder.stop(); });
+  return { blob: new Blob(chunks, { type }), type };
+}
+
+// The still image behind every item. A video cannot be loaded into an <img>, so it is indexed by
+// its own key but resolved to its cover frame; while recording, that entry is replaced by the live
+// <video>, so the drawing code never needs to know the difference.
+async function loadStills() {
+  const seen = new Map();
+  for (const item of project.items) {
+    const key = srcOf(item);
+    if (!key || seen.has(key)) continue;
+    const url = itemKind(item) === 'video' ? posterOf(item) : key;
+    if (!url) continue;
+    try { seen.set(key, await loadImage(url)); } catch { /* a broken picture must not stop the export */ }
+  }
+  return seen;
+}
+
+async function drawSlide(index, imageMap) {
+  const canvas = document.createElement('canvas');
+  canvas.width = OUT_W;
+  canvas.height = OUT_H;
+  drawSlideOn(canvas.getContext('2d'), index, imageMap);
+  return canvas;
+}
+
+// The slide painted onto a context someone else owns — a still canvas for the PNG export, or the
+// recording canvas, called again for every frame while a video plays.
+function drawSlideOn(ctx, index, imageMap) {
   ctx.fillStyle = project.bgColor;
   ctx.fillRect(0, 0, OUT_W, OUT_H);
   const visible = project.items.filter(i => i.x < index + 1 && i.x + i.w > index);
@@ -2122,7 +2404,6 @@ async function drawSlide(index, imageMap) {
     ctx.textBaseline = 'middle';
     ctx.fillText(label, 79, OUT_H - 87);
   }
-  return canvas;
 }
 
 let exported = [];   // [{ index, blob, url, name }]
@@ -2146,27 +2427,50 @@ async function prepareExport() {
   $('#share-pngs').classList.add('hidden');
   try {
     await primeMedia();
-    const sources = [...new Set(project.items.map(srcOf).filter(Boolean))];
-    const imageMap = new Map(await Promise.all(sources.map(async src => [src, await loadImage(src)])));
+    const imageMap = await loadStills();
+    const movies = videoSlides();
+    const codec = movies.length ? recorderType() : null;
+    if (movies.length && !codec) {
+      status.textContent = 'Questo browser non sa produrre video: le slide con video usciranno come immagini ferme.';
+    }
     for (let index = 0; index < project.slideCount; index++) {
+      if (movies.includes(index) && codec) {
+        // a slide with video is recorded in real time: tell how long it will take
+        const seconds = Math.round(clipSeconds(index));
+        status.textContent = `Registro la slide ${pad(index)} (${seconds}s)…`;
+        const { blob, type } = await recordSlide(index, imageMap, ratio => {
+          status.textContent = `Registro la slide ${pad(index)} — ${Math.round(ratio * 100)}%`;
+        });
+        const still = await canvasBlob(await drawSlide(index, imageMap));
+        exported.push({
+          index, blob, url: URL.createObjectURL(blob), movie: true,
+          poster: URL.createObjectURL(still),
+          name: `album-slide-${pad(index)}.${type.includes('mp4') ? 'mp4' : 'webm'}`
+        });
+        continue;
+      }
       const canvas = await drawSlide(index, imageMap);
       const blob = await canvasBlob(canvas);
       exported.push({ index, blob, url: URL.createObjectURL(blob), name: `album-slide-${pad(index)}.png` });
     }
-    grid.innerHTML = exported.map(e => `<figure class="export-item">
-      <img src="${e.url}" alt="Slide ${pad(e.index)}">
-      <figcaption>${pad(e.index)}</figcaption>
+    grid.innerHTML = exported.map(e => `<figure class="export-item${e.movie ? ' movie' : ''}">
+      ${e.movie ? `<video src="${e.url}" muted playsinline loop autoplay poster="${e.poster || ''}"></video>`
+                : `<img src="${e.url}" alt="Slide ${pad(e.index)}">`}
+      <figcaption>${pad(e.index)}${e.movie ? ' · video' : ''}</figcaption>
       <a class="btn" href="${e.url}" download="${e.name}">Salva</a>
     </figure>`).join('');
-    status.textContent = `${exported.length} slide pronte a ${OUT_W}×${OUT_H}. Salvale una per una, oppure tienile premute per salvarle dal telefono.`;
+    const films = exported.filter(e => e.movie).length;
+    status.textContent = films
+      ? `${exported.length} slide pronte a ${OUT_W}×${OUT_H}, di cui ${films} in video. Salvale una per una.`
+      : `${exported.length} slide pronte a ${OUT_W}×${OUT_H}. Salvale una per una, oppure tienile premute per salvarle dal telefono.`;
     const files = exported.map(e => new File([e.blob], e.name, { type: 'image/png' }));
     if (navigator.canShare && navigator.canShare({ files })) {
       const share = $('#share-pngs');
       share.classList.remove('hidden');
       share.onclick = () => navigator.share({ files, title: project.title }).catch(() => {});
     }
-  } catch {
-    status.textContent = 'Non sono riuscito a preparare una delle immagini.';
+  } catch (error) {
+    status.textContent = `Non sono riuscito a completare l'esportazione: ${error.message || 'errore sconosciuto'}`;
   }
 }
 
@@ -2180,8 +2484,7 @@ async function exportPanorama() {
   button.textContent = 'Preparo…';
   try {
     await primeMedia();
-    const sources = [...new Set(project.items.map(srcOf).filter(Boolean))];
-    const imageMap = new Map(await Promise.all(sources.map(async src => [src, await loadImage(src)])));
+    const imageMap = await loadStills();
     const canvas = document.createElement('canvas');
     canvas.width = OUT_W * project.slideCount;
     canvas.height = OUT_H;
@@ -2325,6 +2628,28 @@ function init() {
   $('#add-bg').onchange = e => { readFiles(e.target.files, src => addItem(src, 'full')); e.target.value = ''; };
   $('#add-photo').onchange = e => { readFiles(e.target.files, src => addItem(src, 'free')); e.target.value = ''; };
   $('#add-color').onclick = addColourBlock;
+  $('#add-video').onchange = e => { const file = e.target.files[0]; if (file) addVideoItem(file); e.target.value = ''; };
+  $('#video-start').oninput = e => {
+    const i = selected();
+    if (!i) return;
+    i.start = +e.target.value;
+    i.clip = Math.min(i.clip ?? MAX_CLIP, Math.max(1, Math.min(MAX_CLIP, (i.duration || 0) - i.start)));
+    render();
+  };
+  $('#video-clip').oninput = e => { const i = selected(); if (i) { i.clip = +e.target.value; render(); } };
+  $('#video-audio').onchange = e => { const i = selected(); if (i) { pushUndo(); i.audio = e.target.checked; render(); } };
+  $('#video-cover').onclick = async () => {
+    const i = selected();
+    if (!i || itemKind(i) !== 'video') return;
+    const blob = await grabFrame(i, i.start || 0);
+    if (!blob) { toast('Non riesco a leggere quell’istante'); return; }
+    pushUndo();
+    const id = await putMedia(blob);
+    mediaCache.set(id, mediaCache.get(id) || URL.createObjectURL(blob));
+    i.poster = id;
+    render();
+    toast('Copertina aggiornata');
+  };
   $('#auto-layout').onclick = () => $('#auto-files').click();
   $('#auto-files').onchange = e => { autoLayout(e.target.files); e.target.value = ''; };
   $('#add-text').onclick = addTextItem;
