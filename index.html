@@ -110,16 +110,23 @@
                 <p class="note" id="video-note"></p>
                 <div class="clip-stage">
                   <video id="video-preview" muted playsinline preload="auto"></video>
+                  <span class="clip-tint"></span>
                   <span class="clip-time" id="video-now">0s</span>
                 </div>
                 <button class="btn wide" id="video-play">▶ Riproduci questo tratto</button>
-                <label class="range-label">Inizia da <output id="video-start-value">0s</output></label>
-                <input id="video-start" type="range" min="0" max="100" step="0.1" value="0" title="Da quale punto del video parte la slide">
-                <label class="range-label">Durata <output id="video-clip-value">0s</output></label>
-                <input id="video-clip" type="range" min="1" max="30" step="0.5" value="30" title="Massimo 30 secondi per slide">
-                <div class="clip-ends">
-                  <figure><img id="video-thumb-start" alt=""><figcaption>inizio <b id="video-at-start">0s</b></figcaption></figure>
-                  <figure><img id="video-thumb-end" alt=""><figcaption>fine <b id="video-at-end">0s</b></figcaption></figure>
+                <div class="clip-row">
+                  <span class="clip-field">
+                    <label class="range-label">Inizia da <output id="video-start-value">0s</output></label>
+                    <input id="video-start" type="range" min="0" max="100" step="0.1" value="0" title="Da quale punto del video parte la slide">
+                  </span>
+                  <img id="video-thumb-start" class="clip-chip" alt="" title="Fotogramma di inizio">
+                </div>
+                <div class="clip-row">
+                  <span class="clip-field">
+                    <label class="range-label">Durata <output id="video-clip-value">0s</output></label>
+                    <input id="video-clip" type="range" min="1" max="30" step="0.5" value="30" title="Massimo 30 secondi per slide">
+                  </span>
+                  <img id="video-thumb-end" class="clip-chip" alt="" title="Fotogramma di fine">
                 </div>
                 <label class="check"><input id="video-audio" type="checkbox" checked> <span id="video-audio-label">Includi l'audio</span></label>
                 <button class="btn wide" id="video-cover">Usa il fotogramma iniziale come copertina</button>

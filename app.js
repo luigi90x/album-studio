@@ -217,6 +217,15 @@ function adjustmentCSS(item) {
 const photoCSS = (item, frameFilter) =>
   [frameFilter, (LOOKS[item.look] || LOOKS.none).css, adjustmentCSS(item)].filter(Boolean).join(' ');
 
+// The veil and the vignette, as a background stack. Shared with the video player in the panel so
+// that changing the look of a clip is visible where you are actually watching it.
+const overlayCSS = item => {
+  const layers = [];
+  if (item.tintOpacity) layers.push(`linear-gradient(${rgba(item.tintColor, item.tintOpacity / 100)}, ${rgba(item.tintColor, item.tintOpacity / 100)})`);
+  if (item.vignette) layers.push(`radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,${item.vignette / 100}) 100%)`);
+  return layers.join(', ') || 'transparent';
+};
+
 // Shapes an item can be cut to. Everything is expressed as a path so the browser and the export
 // canvas can be given the same geometry: CSS gets a clip-path, canvas gets the same points.
 const SHAPES = {
@@ -697,13 +706,9 @@ function styleItem(node, item, width) {
   }
   const tint = $('.tint', node);
   if (tint) {
-    const layers = [];
-    if (item.tintOpacity) layers.push(`linear-gradient(${rgba(item.tintColor, item.tintOpacity / 100)}, ${rgba(item.tintColor, item.tintOpacity / 100)})`);
-    if (item.vignette) layers.push(`radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,${item.vignette / 100}) 100%)`);
-    tint.style.background = layers.join(', ') || 'transparent';
+    tint.style.background = overlayCSS(item);
     tint.style.opacity = '1';
     // grain is a tiled noise tile, cheap and resolution independent
-    tint.style.backgroundImage = layers.length ? tint.style.backgroundImage : '';
     node.classList.toggle('grainy', Boolean(item.grain));
     node.style.setProperty('--grain', (item.grain || 0) / 100);
   }
@@ -741,10 +746,14 @@ function renderPreviewTrack() {
   });
 }
 
-// Signature of everything the thumbnails draw. The image ids are cut down to their tail so a
-// signature stays small even when a photo is inlined as base64.
-const rulerSignature = () => JSON.stringify(project, (key, value) =>
-  key === 'src' || key === 'poster' ? String(value).slice(-24) : value);
+// Signature of everything the thumbnails draw. Images count by their resolved address, not by
+// their id: on a reopen the ids are known long before the pictures are, and signing the ids meant
+// the thumbnails built while the media was still loading were never rebuilt — broken images.
+const rulerSignature = () => JSON.stringify(project, (key, value) => {
+  if (key !== 'src' && key !== 'poster') return value;
+  if (!value) return value;
+  return isDirectSrc(value) ? String(value).slice(-24) : mediaCache.get(value) || 'in attesa';
+});
 let rulerKey = '';
 
 function renderRuler() {
@@ -932,8 +941,8 @@ function renderInspector() {
     $('#video-audio').disabled = !item.hasAudio;
     $('#video-audio-label').textContent = item.hasAudio ? 'Includi l’audio' : 'Questo video non ha audio';
     $('#video-fps').value = String(item.fps || CLIP_FPS);
-    $('#video-at-start').textContent = `${clipWindow(item).from.toFixed(1)}s`;
-    $('#video-at-end').textContent = `${clipWindow(item).to.toFixed(1)}s`;
+    $('#video-thumb-start').title = `Inizio: ${clipWindow(item).from.toFixed(1)}s`;
+    $('#video-thumb-end').title = `Fine: ${clipWindow(item).to.toFixed(1)}s`;
     $('#video-play').textContent = playingVideo === item.id ? '❚❚ Ferma' : '▶ Riproduci questo tratto';
     refreshClipThumbs(item);
     $('#video-note').textContent = duration > MAX_CLIP
@@ -1664,8 +1673,8 @@ function showVideoReadout(item) {
   $('#video-clip-value').value = len < asked - 0.05
     ? `${len.toFixed(1)}s — il video finisce prima`
     : `${len.toFixed(1)}s`;
-  $('#video-at-start').textContent = `${from.toFixed(1)}s`;
-  $('#video-at-end').textContent = `${(from + len).toFixed(1)}s`;
+  $('#video-thumb-start').title = `Inizio: ${from.toFixed(1)}s`;
+  $('#video-thumb-end').title = `Fine: ${(from + len).toFixed(1)}s`;
   const player = $('#video-preview');
   if (player.dataset.for === item.id && player.paused && player.readyState >= 1) {
     clipShown = `${item.id}|${from.toFixed(2)}`;
@@ -1678,6 +1687,18 @@ function showVideoReadout(item) {
 function showClip(item) {
   const player = $('#video-preview');
   const url = srcOf(item);
+  // Same treatment the slide gives it, so the look controls are visible right here — on the poster
+  // in the workspace they were, but not on the clip you are watching.
+  const stage = player.parentElement;
+  player.style.filter = photoCSS(item, (FRAMES[item.frame] || FRAMES.clean).filter);
+  player.style.objectFit = 'cover';
+  player.style.objectPosition = `${item.panX}% ${item.panY}%`;
+  player.style.transform = `scale(${(item.zoom || 100) / 100})`;
+  player.style.transformOrigin = `${item.panX}% ${item.panY}%`;
+  stage.style.aspectRatio = `${Math.max(0.05, item.w) * OUT_W} / ${Math.max(0.05, item.h) * OUT_H}`;
+  $('.clip-tint', stage).style.background = overlayCSS(item);
+  stage.classList.toggle('grainy', Boolean(item.grain));
+  stage.style.setProperty('--grain', (item.grain || 0) / 100);
   if (player.dataset.for !== item.id) {           // switching clips: load once, not on every render
     player.dataset.for = item.id;
     player.src = url;
