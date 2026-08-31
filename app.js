@@ -107,6 +107,31 @@ const firstSlideOf = item => Math.max(0, Math.floor(item.x + 0.001));
 const lastSlideOf = item => Math.min(project.slideCount - 1, Math.ceil(item.x + item.w - 0.001) - 1);
 const spanOf = item => Math.max(1, lastSlideOf(item) - firstSlideOf(item) + 1);
 
+// Work that takes a moment must say so. Shown only after a short delay, so quick operations do not
+// make the interface flash.
+let busyJobs = 0, busyTimer = null;
+
+function busy(message) {
+  busyJobs++;
+  const label = $('#busy-text');
+  if (label) label.textContent = message;
+  if (busyTimer) return;
+  busyTimer = setTimeout(() => { if (busyJobs > 0) $('#busy')?.classList.remove('hidden'); }, 180);
+}
+
+function busyUpdate(message) {
+  const label = $('#busy-text');
+  if (label && busyJobs > 0) label.textContent = message;
+}
+
+function busyDone() {
+  busyJobs = Math.max(0, busyJobs - 1);
+  if (busyJobs) return;
+  clearTimeout(busyTimer);
+  busyTimer = null;
+  $('#busy')?.classList.add('hidden');
+}
+
 function toast(message) {
   const el = $('#toast');
   el.textContent = message;
@@ -499,13 +524,34 @@ async function importVideo(file) {
   };
 }
 
+// Decoding and shrinking a photo takes a moment; a batch of them used to run one after the other
+// with nothing on screen. Now three are processed at a time, the order of the results is preserved,
+// and the progress is visible.
+const IMPORT_LANES = 3;
+
+async function importAll(files, label = 'Carico le foto') {
+  const results = new Array(files.length);
+  let done = 0;
+  busy(files.length > 1 ? `${label}… 0 di ${files.length}` : `${label}…`);
+  const queue = files.map((file, index) => ({ file, index }));
+  const lanes = Array.from({ length: Math.min(IMPORT_LANES, queue.length) }, async () => {
+    while (queue.length) {
+      const { file, index } = queue.shift();
+      try { results[index] = await importImage(file); }
+      catch { toast(`Non riesco a leggere ${file.name}`); }
+      done++;
+      if (files.length > 1) busyUpdate(`${label}… ${done} di ${files.length}`);
+    }
+  });
+  try { await Promise.all(lanes); } finally { busyDone(); }
+  return results;
+}
+
 async function readFiles(fileList, callback) {
   const files = [...fileList].filter(f => f.type.startsWith('image/'));
   if (!files.length) { toast('Scegli un file immagine'); return; }
-  for (const file of files) {
-    try { callback(await importImage(file), file.name); }
-    catch { toast(`Non riesco a leggere ${file.name}`); }
-  }
+  const sources = await importAll(files);
+  sources.forEach((src, index) => { if (src) callback(src, files[index].name); });
 }
 
 /* --------------------------------------------------------------- strip */
@@ -562,7 +608,8 @@ function buildStrip(host, width, interactive) {
     // one object, four shapes: a photo, a solid colour block, text, or an empty frame
     const kind = itemKind(item);
     const node = document.createElement('div');
-    node.className = `item frame-${item.frame} ${kind === 'empty' ? 'is-empty' : ''} ${item.id === selectedItem && interactive ? 'selected' : ''} ${spanOf(item) > 1 ? 'spanning' : ''} ${item.demo ? 'demo' : ''}`;
+    const pending = Boolean(item.src) && !isDirectSrc(item.src) && !mediaCache.has(item.src);
+    node.className = `item frame-${item.frame} ${kind === 'empty' ? 'is-empty' : ''} ${pending ? 'loading' : ''} ${item.id === selectedItem && interactive ? 'selected' : ''} ${spanOf(item) > 1 ? 'spanning' : ''} ${item.demo ? 'demo' : ''}`;
     node.dataset.id = item.id;
     const inside = kind === 'text' ? '<div class="item-text"></div>'
       : kind === 'empty' ? '<div class="item-empty">＋</div>'
@@ -1392,11 +1439,7 @@ async function autoLayout(files) {
   const list = [...files].filter(f => f.type.startsWith('image/'));
   if (!list.length) { toast('Scegli delle immagini'); return; }
 
-  const sources = [];
-  for (const file of list) {
-    try { sources.push(await importImage(file)); }
-    catch { toast(`Non riesco a leggere ${file.name}`); }
-  }
+  const sources = (await importAll(list)).filter(Boolean);
   if (!sources.length) return;
 
   const answer = await askLayout(sources);
@@ -1511,6 +1554,7 @@ function addTextItem() {
 }
 
 async function addVideoItem(file) {
+  busy('Preparo il video…');
   try {
     const media = await importVideo(file);
     pushUndo();
@@ -1527,6 +1571,8 @@ async function addVideoItem(file) {
     toast(error.message === 'storage'
       ? 'I video servono spazio: apri l’app da localhost o dal sito, non come file'
       : 'Non riesco a leggere questo video');
+  } finally {
+    busyDone();
   }
 }
 
@@ -1973,10 +2019,14 @@ function scheduleAutosave() {
 }
 
 async function restoreAutosave() {
+  let showing = false;         // only close what we actually opened
   try {
     const found = (await allProjects()).find(p => p.id === AUTOSAVE_ID);
-    if (!found || !found.items?.length) return;
+    if (!found || !found.items?.length) return;   // nothing to restore: no indicator at all
+    busy('Riprendo il lavoro…');
+    showing = true;
     project = await absorbMedia(normalize(found));
+    render();                       // the layout appears at once, pictures fill in as they arrive
     await primeMedia();
     project.id = found.savedAs || null;      // it is a working copy, not the named project
     applyFormat(project.format);
@@ -1985,6 +2035,7 @@ async function restoreAutosave() {
     fitZoom();
     toast('Ripreso il lavoro dell’ultima sessione');
   } catch { /* nothing to restore */ }
+  finally { if (showing) busyDone(); }
 }
 
 async function saveProject() {
@@ -2008,8 +2059,10 @@ function openBackup(file) {
   const reader = new FileReader();
   reader.onload = async () => {
     try {
+      busy('Apro il backup…');
       project = await absorbMedia(normalize(JSON.parse(reader.result)));
       await primeMedia();
+      busyDone();
       project.id ||= uid();
       applyFormat(project.format);
       selectedSlide = 0;
@@ -2039,8 +2092,10 @@ async function renderProjects() {
       <span><button data-open="${p.id}">Apri</button><button class="del" data-del="${p.id}" title="Elimina il progetto">Elimina</button></span></footer></article>`;
   }).join('');
   $$('[data-open]').forEach(b => b.onclick = async () => {
+    busy('Apro il progetto…');
     project = await absorbMedia(normalize(saved.find(p => p.id === b.dataset.open)));
     await primeMedia();
+    busyDone();
     applyFormat(project.format);
     selectedSlide = 0;
     selectedItem = null;
@@ -2799,6 +2854,14 @@ function init() {
   $('#save-project').onclick = saveProject;
   $('#save-template').onclick = saveAsTemplate;
   $('#new-project').onclick = startNewProject;
+  $('#new-project-panel').onclick = startNewProject;
+  // the sheet: pull the panels up when the controls need more room than the strip
+  $('#sheet-toggle').onclick = () => {
+    const open = $('.workspace').classList.toggle('sheet-open');
+    $('#sheet-toggle').textContent = open ? '▼' : '▲';
+    $('#sheet-toggle').title = open ? 'Più spazio per la striscia' : 'Più spazio per i controlli';
+    fitZoom({ auto: true });
+  };
   $('#export-open').onclick = () => { $('#export-dialog').showModal(); prepareExport(); };
   $('#close-export').onclick = () => $('#export-dialog').close();
   $('#export-dialog').addEventListener('close', clearExports);

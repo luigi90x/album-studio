@@ -54,29 +54,31 @@
               </label>
             </div>
 
-            <div class="bar-right">
-              <div class="mode-switch" role="group" aria-label="Vista">
-                <button id="mode-edit" class="seg active" title="Composizione sulla striscia continua">Modifica</button>
-                <button id="mode-preview" class="seg" title="Come appare scorrendo il carosello">Anteprima</button>
-              </div>
-              <div class="history">
-                <button id="undo" title="Annulla (Ctrl+Z)">↶</button>
-                <button id="redo" title="Ripristina (Ctrl+Shift+Z)">↷</button>
-              </div>
-              <div class="zoomer">
-                <button id="zoom-out" title="Riduci">−</button>
-                <output id="zoom-value">100%</output>
-                <button id="zoom-in" title="Ingrandisci">+</button>
-                <button id="zoom-fit" title="Adatta allo schermo">Adatta</button>
-              </div>
-            </div>
           </div>
           <div id="stage" class="stage">
+            <div id="busy" class="busy hidden" role="status"><span class="spinner"></span><span id="busy-text">Carico…</span></div>
             <div id="strip-scroll" class="strip-scroll"><div id="strip" class="strip"></div></div>
             <div id="preview-track" class="preview-track hidden"></div>
           </div>
+          <div class="view-bar">
+            <div class="mode-switch" role="group" aria-label="Vista">
+              <button id="mode-edit" class="seg active" title="Composizione sulla striscia continua">Modifica</button>
+              <button id="mode-preview" class="seg" title="Come appare scorrendo il carosello">Anteprima</button>
+            </div>
+            <div class="history">
+              <button id="undo" title="Annulla (Ctrl+Z)">↶</button>
+              <button id="redo" title="Ripristina (Ctrl+Shift+Z)">↷</button>
+            </div>
+            <div class="zoomer">
+              <button id="zoom-out" title="Riduci">−</button>
+              <output id="zoom-value">100%</output>
+              <button id="zoom-in" title="Ingrandisci">+</button>
+              <button id="zoom-fit" title="Adatta allo schermo">Adatta</button>
+            </div>
+          </div>
           <div class="ruler-wrap"><div id="ruler" class="ruler"></div></div>
           <nav class="tabbar" id="tabbar" aria-label="Sezioni">
+            <button class="sheet-toggle" id="sheet-toggle" title="Più spazio per i controlli">▲</button>
             <button data-scope="item" class="tab-scope active">Elemento</button>
             <button data-scope="slide" class="tab-scope">Slide</button>
             <button data-scope="carousel" class="tab-scope">Carosello</button>
@@ -331,6 +333,7 @@
               <div class="field"><span>Colore di fondo</span><input id="bg-color" type="color" value="#1b1b1b" title="Si vede dove non ci sono foto"></div>
               <label class="check" title="Aggiunge 1/4, 2/4… in basso a ogni slide, anche nell'export"><input id="show-numbers" type="checkbox"> Numera le slide (1/4)</label>
               <label class="check" title="Mostra i confini tra slide e il margine di sicurezza"><input id="show-guides" type="checkbox" checked> Mostra confini e margini</label>
+              <button class="btn wide" id="new-project-panel" title="Comincia un carosello da zero">Nuovo progetto</button>
               <button class="btn wide" id="save-template" title="Salva la composizione come template riutilizzabile: tiene le forme, non le foto">Salva come template</button>
               <p class="note" style="margin-top:12px">Le foto restano sul tuo dispositivo. Niente account, niente upload.</p>
             </div>
