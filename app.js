@@ -2774,13 +2774,20 @@ async function prepareExport() {
       ${e.movie ? `<video src="${e.url}" muted playsinline controls poster="${e.poster || ''}"></video>`
                 : `<img src="${e.url}" alt="Slide ${pad(e.index)}">`}
       <figcaption>${pad(e.index)}${e.movie ? ' · video' : ''}</figcaption>
-      <a class="btn" href="${e.url}" download="${e.name}">Salva</a>
+      <button class="btn" data-save="${e.index}">Salva</button>
     </figure>`).join('');
     const films = exported.filter(e => e.movie).length;
     status.textContent = films
       ? `${exported.length} slide pronte a ${OUT_W}×${OUT_H}, di cui ${films} in video. Salvale una per una.`
       : `${exported.length} slide pronte a ${OUT_W}×${OUT_H}. Salvale una per una, oppure tienile premute per salvarle dal telefono.`;
-    const files = exported.map(e => new File([e.blob], e.name, { type: 'image/png' }));
+    $$('[data-save]', grid).forEach(b => b.onclick = async () => {
+      const item = exported.find(e => String(e.index) === b.dataset.save);
+      if (!item) return;
+      const how = await deliverFile(item.blob, item.name);
+      if (how !== 'annullato') toast(how === 'condiviso' ? 'Scegli dove salvarla' : 'Salvata');
+    });
+    // each file with its own type: handing an mp4 over as image/png made the share sheet refuse it
+    const files = exported.map(e => new File([e.blob], e.name, { type: e.blob.type || 'image/png' }));
     if (navigator.canShare && navigator.canShare({ files })) {
       const share = $('#share-pngs');
       share.classList.remove('hidden');
@@ -2820,13 +2827,9 @@ async function exportPanorama() {
       }
     }
     const blob = await canvasBlob(canvas);
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${(project.title || 'album').toLowerCase().replace(/\s+/g, '-')}-panorama.png`;
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
-    toast(`Panoramica ${canvas.width}×${canvas.height} scaricata`);
+    const name = `${(project.title || 'album').toLowerCase().replace(/\s+/g, '-')}-panorama.png`;
+    const how = await deliverFile(blob, name);
+    if (how !== 'annullato') toast(`Panoramica ${canvas.width}×${canvas.height} ${how === 'condiviso' ? 'pronta da salvare' : 'scaricata'}`);
   } catch {
     toast('Non sono riuscito a comporre la panoramica');
   } finally {
@@ -2847,15 +2850,34 @@ async function downloadPNGs() {
   toast(exported.length > 1 ? 'Se il browser ha scaricato solo la prima, consenti i download multipli o usa “Salva” su ogni slide' : 'Download avviato');
 }
 
+// Handing a file to the device. A download link is fine on a computer and on Android, but on an
+// iPhone — above all once the app sits on the Home screen — it often does nothing at all. There the
+// share sheet is the way out: from it the file reaches Files, AirDrop, Mail or WhatsApp.
+async function deliverFile(blob, name) {
+  const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
+  if (navigator.canShare?.({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: name });
+      return 'condiviso';
+    } catch (error) {
+      if (error?.name === 'AbortError') return 'annullato';   // you closed the sheet: not a failure
+    }
+  }
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 1500);
+  return 'scaricato';
+}
+
 async function downloadProject() {
   const portable = await withMediaInline(project);   // a backup has to travel with its pictures
   const blob = new Blob([JSON.stringify(portable, null, 2)], { type: 'application/json' });
-  const link = document.createElement('a');
-  link.href = URL.createObjectURL(blob);
-  link.download = `${(project.title || 'album').toLowerCase().replace(/\s+/g, '-')}.json`;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(link.href), 1500);
-  toast('Backup scaricato');
+  const name = `${(project.title || 'album').toLowerCase().replace(/\s+/g, '-')}.json`;
+  const how = await deliverFile(blob, name);
+  if (how === 'annullato') return;
+  toast(how === 'condiviso' ? 'Backup pronto: scegli “Salva su File”' : 'Backup scaricato');
 }
 
 /* ------------------------------------------------------------------ ui */
