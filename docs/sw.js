@@ -1,6 +1,6 @@
 // Keeps the app usable with no network at all: everything it needs is cached on first visit.
 // Bump CACHE when you publish a new build, so phones pick it up instead of the old copy.
-const CACHE = 'album-studio-v25';
+const CACHE = 'album-studio-v26';
 const FILES = ['.', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', event => {
