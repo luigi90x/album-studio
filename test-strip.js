@@ -60,4 +60,22 @@ assert.deepStrictEqual(box, { x: 2, y: 0, w: 1, h: 1 }, 'fills the slide it is a
   assert.ok(clipWindow({ start: 0, clip: 0, duration: 5 }).len > 0, 'mai lunga zero');
 }
 
+
+// A clip must never straddle a seam: the export records one slide at a time.
+{
+  const { keepClipInOneSlide } = require('./app.js');
+  setSlideCount(4);
+  const clip = { video: true, src: 'v', x: 0.7, w: 0.8, h: 0.5, y: 0 };
+  assert.ok(keepClipInOneSlide(clip), 'un video a cavallo viene spostato');
+  assert.ok(clip.x >= 1 && clip.x + clip.w <= 2, `dentro la slide 2, invece x=${clip.x} w=${clip.w}`);
+  const wide = { video: true, src: 'v', x: 0.2, w: 2.5, h: 1, y: 0 };
+  keepClipInOneSlide(wide);
+  assert.strictEqual(wide.w, 1, 'non piu larga di una slide');
+  const still = { video: true, src: 'v', x: 2.1, w: 0.5, h: 0.5, y: 0 };
+  assert.strictEqual(keepClipInOneSlide(still), false, 'chi sta gia dentro non viene toccato');
+  const photo = { src: 'p', x: 0.5, w: 1.5, h: 1, y: 0 };
+  keepClipInOneSlide(photo);
+  assert.strictEqual(photo.w, 1.5, 'le foto restano libere di stare a cavallo');
+}
+
 console.log('strip geometry OK');
