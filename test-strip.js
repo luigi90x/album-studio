@@ -49,4 +49,15 @@ box = { x: 2.4, y: 0.2, w: 0.3, h: 0.4 };
 fillOccupiedSlides(box);
 assert.deepStrictEqual(box, { x: 2, y: 0, w: 1, h: 1 }, 'fills the slide it is actually on');
 
+
+// The window a clip plays: a zero-length one made the player snap back instead of running.
+{
+  const { clipWindow } = require('./app.js');
+  const w = clipWindow({ start: 2, clip: 3, duration: 10 });
+  assert.deepStrictEqual([w.from, w.to, w.len], [2, 5, 3], 'finestra semplice');
+  assert.strictEqual(clipWindow({ start: 8, clip: 30, duration: 10 }).len, 2, 'non oltre la fine del video');
+  assert.strictEqual(clipWindow({ duration: 40 }).len, 30, 'senza scelta vale il massimo');
+  assert.ok(clipWindow({ start: 0, clip: 0, duration: 5 }).len > 0, 'mai lunga zero');
+}
+
 console.log('strip geometry OK');
