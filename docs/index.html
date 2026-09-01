@@ -1701,10 +1701,20 @@ function renderStrip() {
   }
 }
 
+let previewKey = '';
+
 function renderPreviewTrack() {
   const track = $('#preview-track');
-  track.innerHTML = '';
   const width = Math.min(slideW, 300);
+  // Rebuilding resets scrollLeft: on Android the URL bar collapsing mid-swipe resizes the stage,
+  // which re-renders and threw you back to slide 01 — the swipe looked broken. Same pictures as a
+  // moment ago: leave the track, and its scroll position, alone.
+  const key = `${rulerSignature()}|${width.toFixed(0)}`;
+  if (key === previewKey && track.children.length === project.slideCount) return;
+  previewKey = key;
+  // a real rebuild keeps the slide you were looking at
+  const wasAt = track.children.length ? Math.round(track.scrollLeft / (track.children[0].offsetWidth + 14)) : 0;
+  track.innerHTML = '';
   Array.from({ length: project.slideCount }, (_, index) => {
     const wrap = document.createElement('div');
     wrap.className = 'preview-slide';
@@ -1717,6 +1727,7 @@ function renderPreviewTrack() {
     track.append(wrap);
     buildStrip(inner, width, false);
   });
+  if (wasAt > 0) track.scrollLeft = wasAt * (width + 14);
 }
 
 // Signature of everything the thumbnails draw. Images count by their resolved address, not by
