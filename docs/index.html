@@ -2037,7 +2037,9 @@ function render() {
   shownItem = selectedItem;
   $('#strip-scroll').classList.toggle('hidden', mode !== 'edit');
   $('#preview-track').classList.toggle('hidden', mode !== 'preview');
-  if (mode === 'edit') renderStrip(); else renderPreviewTrack();
+  // the preview is what the carousel looks like: nothing on top of the photos, no invite, no "+ slide"
+  $('#add-slide-here').classList.toggle('hidden', mode !== 'edit');
+  if (mode === 'edit') renderStrip(); else { $('.strip-empty')?.remove(); renderPreviewTrack(); }
   renderRuler();
   renderLayers();
   renderInspector();
