@@ -404,7 +404,6 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
   .top-actions{gap:5px}
   .topbar .btn{min-height:36px;padding:8px 10px;font-size:11.5px}
   .topbar .btn.icon{width:32px}
-  #new-project{display:none}          /* lives in the carousel panel on a phone */
 
   /* The tools scroll sideways instead of wrapping: this is what stopped the page from overflowing. */
   .add-bar{padding:7px 0 7px 10px;gap:0}
@@ -476,8 +475,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
         <button class="tab" data-panel="projects" title="I caroselli che hai salvato su questo dispositivo"><span class="tab-ico">⧉</span><span class="tab-text">Salvati</span></button>
       </nav>
       <div class="top-actions">
-        <button class="btn icon" id="help-open" title="Come funziona">?</button>
-        <button class="btn" id="new-project" title="Comincia un carosello da zero">Nuovo</button>
+        <button class="btn icon" id="more-open" title="Altro: nuovo progetto, template, aiuto" aria-haspopup="menu">⋯</button>
         <button class="btn" id="save-project" title="Salva il progetto su questo dispositivo">Salva</button>
         <button class="btn primary" id="export-open" title="Genera le slide pronte da pubblicare">Esporta</button>
       </div>
@@ -820,8 +818,6 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
               <div class="field"><span>Colore di fondo</span><input id="bg-color" type="color" value="#1b1b1b" title="Si vede dove non ci sono foto"></div>
               <label class="check" title="Aggiunge 1/4, 2/4… in basso a ogni slide, anche nell'export"><input id="show-numbers" type="checkbox"> Numera le slide (1/4)</label>
               <label class="check" title="Mostra i confini tra slide e il margine di sicurezza"><input id="show-guides" type="checkbox" checked> Mostra confini e margini</label>
-              <button class="btn wide" id="new-project-panel" title="Comincia un carosello da zero">Nuovo progetto</button>
-              <button class="btn wide" id="save-template" title="Salva la composizione come template riutilizzabile: tiene le forme, non le foto">Salva come template</button>
               <p class="note" style="margin-top:12px">Le foto restano sul tuo dispositivo. Niente account, niente upload.</p>
             </div>
           </details>
@@ -851,6 +847,12 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
   </div>
 
   <div id="toast" class="toast" role="status"></div>
+
+  <div id="more-menu" class="context-menu hidden" role="menu">
+    <button id="new-project" title="Comincia un carosello da zero">Nuovo progetto</button>
+    <button id="save-template" title="Salva la composizione come template riutilizzabile: tiene le forme, non le foto">Salva come template</button>
+    <button id="help-open">Come funziona</button>
+  </div>
 
   <div id="context-menu" class="context-menu hidden" role="menu">
     <button data-act="replace">Sostituisci immagine</button>
@@ -4141,7 +4143,17 @@ function init() {
   $('#save-project').onclick = saveProject;
   $('#save-template').onclick = saveAsTemplate;
   $('#new-project').onclick = startNewProject;
-  $('#new-project-panel').onclick = startNewProject;
+  // the rare actions live behind one button, so the phone topbar keeps room for Salva and Esporta
+  const moreMenu = $('#more-menu');
+  $('#more-open').onclick = () => {
+    const button = $('#more-open').getBoundingClientRect();
+    moreMenu.classList.toggle('hidden');
+    if (moreMenu.classList.contains('hidden')) return;
+    const box = moreMenu.getBoundingClientRect();
+    moreMenu.style.left = `${clamp(button.right - box.width, 8, innerWidth - box.width - 8)}px`;
+    moreMenu.style.top = `${button.bottom + 6}px`;
+  };
+  moreMenu.querySelectorAll('button').forEach(b => b.addEventListener('click', () => moreMenu.classList.add('hidden')));
   // the sheet: pull the panels up when the controls need more room than the strip
   $('#sheet-toggle').onclick = () => {
     const open = $('.workspace').classList.toggle('sheet-open');
@@ -4166,6 +4178,7 @@ function init() {
   $$('#context-menu [data-act]').forEach(b => b.onclick = () => runContextAction(b.dataset.act));
   document.addEventListener('pointerdown', e => {
     if (!e.target.closest('#context-menu') && !e.target.closest('.item')) closeContextMenu();
+    if (!e.target.closest('#more-menu') && !e.target.closest('#more-open')) moreMenu.classList.add('hidden');
   }, true);
   $('#strip').addEventListener('contextmenu', e => {
     const node = e.target.closest('.item');
@@ -4194,6 +4207,7 @@ function init() {
     if (typing) return;
     if ((e.key === 'Delete' || e.key === 'Backspace') && selectedItem) { e.preventDefault(); removeSelected(); }
     if (e.key === 'Escape') {
+      if (!$('#more-menu').classList.contains('hidden')) { $('#more-menu').classList.add('hidden'); return; }
       if (!$('#context-menu').classList.contains('hidden')) { closeContextMenu(); return; }
       if (selectedItem) { selectedItem = null; render(); }
     }

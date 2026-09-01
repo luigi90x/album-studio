@@ -3182,7 +3182,17 @@ function init() {
   $('#save-project').onclick = saveProject;
   $('#save-template').onclick = saveAsTemplate;
   $('#new-project').onclick = startNewProject;
-  $('#new-project-panel').onclick = startNewProject;
+  // the rare actions live behind one button, so the phone topbar keeps room for Salva and Esporta
+  const moreMenu = $('#more-menu');
+  $('#more-open').onclick = () => {
+    const button = $('#more-open').getBoundingClientRect();
+    moreMenu.classList.toggle('hidden');
+    if (moreMenu.classList.contains('hidden')) return;
+    const box = moreMenu.getBoundingClientRect();
+    moreMenu.style.left = `${clamp(button.right - box.width, 8, innerWidth - box.width - 8)}px`;
+    moreMenu.style.top = `${button.bottom + 6}px`;
+  };
+  moreMenu.querySelectorAll('button').forEach(b => b.addEventListener('click', () => moreMenu.classList.add('hidden')));
   // the sheet: pull the panels up when the controls need more room than the strip
   $('#sheet-toggle').onclick = () => {
     const open = $('.workspace').classList.toggle('sheet-open');
@@ -3207,6 +3217,7 @@ function init() {
   $$('#context-menu [data-act]').forEach(b => b.onclick = () => runContextAction(b.dataset.act));
   document.addEventListener('pointerdown', e => {
     if (!e.target.closest('#context-menu') && !e.target.closest('.item')) closeContextMenu();
+    if (!e.target.closest('#more-menu') && !e.target.closest('#more-open')) moreMenu.classList.add('hidden');
   }, true);
   $('#strip').addEventListener('contextmenu', e => {
     const node = e.target.closest('.item');
@@ -3235,6 +3246,7 @@ function init() {
     if (typing) return;
     if ((e.key === 'Delete' || e.key === 'Backspace') && selectedItem) { e.preventDefault(); removeSelected(); }
     if (e.key === 'Escape') {
+      if (!$('#more-menu').classList.contains('hidden')) { $('#more-menu').classList.add('hidden'); return; }
       if (!$('#context-menu').classList.contains('hidden')) { closeContextMenu(); return; }
       if (selectedItem) { selectedItem = null; render(); }
     }

@@ -22,8 +22,7 @@
         <button class="tab" data-panel="projects" title="I caroselli che hai salvato su questo dispositivo"><span class="tab-ico">⧉</span><span class="tab-text">Salvati</span></button>
       </nav>
       <div class="top-actions">
-        <button class="btn icon" id="help-open" title="Come funziona">?</button>
-        <button class="btn" id="new-project" title="Comincia un carosello da zero">Nuovo</button>
+        <button class="btn icon" id="more-open" title="Altro: nuovo progetto, template, aiuto" aria-haspopup="menu">⋯</button>
         <button class="btn" id="save-project" title="Salva il progetto su questo dispositivo">Salva</button>
         <button class="btn primary" id="export-open" title="Genera le slide pronte da pubblicare">Esporta</button>
       </div>
@@ -366,8 +365,6 @@
               <div class="field"><span>Colore di fondo</span><input id="bg-color" type="color" value="#1b1b1b" title="Si vede dove non ci sono foto"></div>
               <label class="check" title="Aggiunge 1/4, 2/4… in basso a ogni slide, anche nell'export"><input id="show-numbers" type="checkbox"> Numera le slide (1/4)</label>
               <label class="check" title="Mostra i confini tra slide e il margine di sicurezza"><input id="show-guides" type="checkbox" checked> Mostra confini e margini</label>
-              <button class="btn wide" id="new-project-panel" title="Comincia un carosello da zero">Nuovo progetto</button>
-              <button class="btn wide" id="save-template" title="Salva la composizione come template riutilizzabile: tiene le forme, non le foto">Salva come template</button>
               <p class="note" style="margin-top:12px">Le foto restano sul tuo dispositivo. Niente account, niente upload.</p>
             </div>
           </details>
@@ -397,6 +394,12 @@
   </div>
 
   <div id="toast" class="toast" role="status"></div>
+
+  <div id="more-menu" class="context-menu hidden" role="menu">
+    <button id="new-project" title="Comincia un carosello da zero">Nuovo progetto</button>
+    <button id="save-template" title="Salva la composizione come template riutilizzabile: tiene le forme, non le foto">Salva come template</button>
+    <button id="help-open">Come funziona</button>
+  </div>
 
   <div id="context-menu" class="context-menu hidden" role="menu">
     <button data-act="replace">Sostituisci immagine</button>
