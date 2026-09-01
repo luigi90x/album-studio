@@ -417,8 +417,10 @@ input[type=range]{width:100%;accent-color:var(--accent);height:22px;margin:0}
   /* the workspace gets a height of its own, and the panels slide up over it when you need room */
   .workspace{display:flex;flex-direction:column;grid-template-areas:none;overflow-y:auto;-webkit-overflow-scrolling:touch}
   .stage-wrap{position:sticky;top:0;z-index:5;flex:0 0 auto;border-bottom:1px solid var(--line)}
-  .stage{flex:0 0 40vh;min-height:200px;transition:flex-basis .22s}
-  .workspace.sheet-open .stage{flex-basis:20vh;min-height:120px}
+  /* svh, not vh: with vh the stage changed height every time Android hid the URL bar, which
+     re-rendered the strip and the preview under your finger */
+  .stage{flex:0 0 40vh;flex-basis:40svh;min-height:200px;transition:flex-basis .22s}
+  .workspace.sheet-open .stage{flex-basis:20vh;flex-basis:20svh;min-height:120px}
   .ruler{padding:7px 10px;gap:6px}
 
   .col{max-height:none;overflow:visible;border:0!important;border-top:1px solid var(--line)!important}

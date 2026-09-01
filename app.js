@@ -11,7 +11,8 @@ const FORMATS = {
   '9:16': { w: 1080, h: 1920, label: 'Storia 9:16' }
 };
 let OUT_W = FORMATS['4:5'].w, OUT_H = FORMATS['4:5'].h;
-const MIN_SLIDES = 1, MAX_SLIDES = 12;
+const MIN_SLIDES = 1, MAX_SLIDES = 20;
+const PREVIEW_GAP = 14;    // matches the gap between slides in .preview-track
 const MIN_W = 0.08, MIN_H = 0.05;   // smallest item, in slide units
 const MAX_PHOTO_SIDE = 1800;         // imported photos are downscaled to this
 const MAX_CLIP = 30;                 // seconds of video that end up in the export
@@ -744,23 +745,37 @@ function renderStrip() {
 
 let previewKey = '';
 
+// The track is the thing your finger scrolls, so it must survive a re-render. Replacing its
+// children mid-swipe cancels the gesture and drops you back on slide 01 — which is why the swipe
+// worked one time and did nothing the next, depending on whether a resize or a photo finishing
+// loading landed under the finger. So: rebuild only when the pictures or the slide count change,
+// and treat a width change (zoom, rotation, the Android URL bar resizing the stage) as a restyle
+// of the slides already there.
 function renderPreviewTrack() {
   const track = $('#preview-track');
   const width = Math.min(slideW, 300);
-  // Rebuilding resets scrollLeft: on Android the URL bar collapsing mid-swipe resizes the stage,
-  // which re-renders and threw you back to slide 01 — the swipe looked broken. Same pictures as a
-  // moment ago: leave the track, and its scroll position, alone.
-  const key = `${rulerSignature()}|${width.toFixed(0)}`;
-  if (key === previewKey && track.children.length === project.slideCount) return;
+  const height = width * OUT_H / OUT_W;
+  const key = rulerSignature();
+
+  if (key === previewKey && track.children.length === project.slideCount) {
+    if (Math.abs(parseFloat(track.firstChild.style.width) - width) < 0.5) return;   // nothing moved
+    Array.from(track.children).forEach((wrap, index) => {
+      wrap.style.width = `${width}px`;
+      wrap.style.height = `${height}px`;
+      wrap.firstChild.style.left = `${-index * width}px`;
+      buildStrip(wrap.firstChild, width, false);
+    });
+    return;
+  }
+
   previewKey = key;
-  // a real rebuild keeps the slide you were looking at
-  const wasAt = track.children.length ? Math.round(track.scrollLeft / (track.children[0].offsetWidth + 14)) : 0;
+  const wasAt = track.children.length ? Math.round(track.scrollLeft / (track.firstChild.offsetWidth + PREVIEW_GAP)) : 0;
   track.innerHTML = '';
   Array.from({ length: project.slideCount }, (_, index) => {
     const wrap = document.createElement('div');
     wrap.className = 'preview-slide';
     wrap.style.width = `${width}px`;
-    wrap.style.height = `${width * OUT_H / OUT_W}px`;
+    wrap.style.height = `${height}px`;
     const inner = document.createElement('div');
     inner.className = 'strip';
     inner.style.left = `${-index * width}px`;
@@ -768,7 +783,7 @@ function renderPreviewTrack() {
     track.append(wrap);
     buildStrip(inner, width, false);
   });
-  if (wasAt > 0) track.scrollLeft = wasAt * (width + 14);
+  if (wasAt > 0) track.scrollLeft = wasAt * (width + PREVIEW_GAP);
 }
 
 // Signature of everything the thumbnails draw. Images count by their resolved address, not by
